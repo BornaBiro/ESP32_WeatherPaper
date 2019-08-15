@@ -29,7 +29,8 @@ const char pass[] = "CaVex250_H2sH11";
 //const char pass[] = "croduino";
 //const char ssid[] = "AndroidAP12589";
 //const char pass[] = "CaVex250_H2sH11";
-const char DOW[7][4] = {"NED", "PON", "UTO", "SRI", "CET", "PET", "SUB"};
+//const char DOW[7][4] = {"NED", "PON", "UTO", "SRI", "CET", "PET", "SUB"};
+const char DOW[7][4] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 const char* oznakeVjetar[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
 typedef struct vremenskaProg {
   float temp[8], tempMax[8], tempMin[8], pressure[8], pressureSea[8], pressureGnd[8], windSpeed[8], windDir[8], humidity[8];
@@ -49,7 +50,8 @@ typedef struct weatherDay {
 int timeOffset;
 weatherDay dani[6];
 
-const size_t capacity = JSON_ARRAY_SIZE(2) + JSON_OBJECT_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(12) + 310;
+//const size_t capacity = JSON_ARRAY_SIZE(2) + JSON_OBJECT_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(12) + 310;
+StaticJsonDocument<2000> doc;
 const size_t capacity2 = 40 * JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(40) + 85 * JSON_OBJECT_SIZE(1) + 41 * JSON_OBJECT_SIZE(2) + 40 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + 35 * JSON_OBJECT_SIZE(7) + 45 * JSON_OBJECT_SIZE(8) + 8740;
 const char* NTPServer = "hr.pool.ntp.org";
 uint16_t ntpPort = 123;
@@ -311,10 +313,11 @@ void readWeather() {
     int cond;
   };
   wforecast prognoza[40];
-  if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {
+  //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {   //Belisce
+  if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&id=3221033&units=metric&lang=en&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {            //Hannover
     if (http.GET() > 0) {
       String APIData;
-      DynamicJsonDocument doc(capacity);
+      //DynamicJsonDocument doc(capacity);
       JsonObject main, weather_0, sys;
       char wIcon[6];
       APIData = http.getString();
@@ -344,7 +347,8 @@ void readWeather() {
 
 
   //Uhvati podatke s APIa s Interneta, te ih smjesti u polje struktura (privremeno)
-  if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {
+  //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) { //Belisce
+  if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?&id=3221033&units=metric&lang=en&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) { //Hannover
     if (http.GET() > 0) {
       String APIData;
       APIData = http.getString();
@@ -512,6 +516,10 @@ void refresh() {
   display.setFont();
   display.setCursor(4, 55);
   display.print(opis);
+  display.setCursor(5, 26);
+  display.print(F("Hannover"));
+  display.setCursor(5, 34);
+  display.print(F("Powered by openweathermaps.org"));
 
   sprintf(tmp, "%1d:%02d %d/%d/%4d %3s", td.h, td.m, td.d, td.mo, td.y, DOW[td.dow]);
   display.setFont(&FreeSansOblique18pt7b);
