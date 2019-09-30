@@ -3,7 +3,7 @@
 extern Adafruit_MCP23017 mcp;
 
 void initTouch() {
-  //mcp.begin(7);
+  //mcp.begin(0);
   pinMode(AY, INPUT);
   pinMode(AX, INPUT);
 }
@@ -16,6 +16,15 @@ bool touchAvailable() {
   mcp.digitalWrite(X0, LOW);
   delay(1);
   return !mcp.digitalRead(Y1);
+}
+
+void touchSleep() {
+  mcp.pullUp(Y1, LOW);
+  mcp.pinMode(X0, OUTPUT);
+  mcp.digitalWrite(X0, LOW);
+  mcp.pinMode(Y0, INPUT);
+  mcp.pinMode(X1, INPUT);
+  mcp.pinMode(Y1, INPUT);
 }
 
 bool readTouch(int *t) {

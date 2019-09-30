@@ -112,7 +112,7 @@
 #define _swap_int16_t(a, b) { int16_t t = a; a = b; b = t; }
 #endif
 
-#define REF_RATE    5
+#define REF_RATE    6
 #define BLACK 1
 #define WHITE 0
 

@@ -15,5 +15,7 @@ void initTouch();
 
 bool touchAvailable();
 
+void touchSleep();
+
 bool readTouch(int *t);
 #endif
