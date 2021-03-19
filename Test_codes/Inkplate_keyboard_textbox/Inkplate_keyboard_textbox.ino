@@ -34,11 +34,12 @@ struct textBoxHandle
 {
   static const uint8_t maxSize = 101;
   char text[maxSize];
-  int size = 20;
-  int selected = 0;
+  uint8_t size = 20;
+  uint8_t n = 0;
+  uint8_t selected = 0;
   uint8_t fontScale = 1;
-  int x = 0;
-  int y = 0;
+  int16_t x = 0;
+  int16_t y = 0;
 }text;
 
 void setup() {
@@ -176,7 +177,7 @@ void textBox(struct textBoxHandle *s, char _c, int _tsx, int _tsy)
   int k = 0;
   int _h = (s->fontScale * 8) + 4;
   int _w = (s->fontScale * 6 * s->size) + 4;
-  int _size = strlen(s->text);
+  //int _size = strlen(s->text);
   int _startPos = 0;
   int i = 0;
   //int _cursor = 0;
@@ -186,16 +187,18 @@ void textBox(struct textBoxHandle *s, char _c, int _tsx, int _tsy)
 
     if (_c > 31 && _c < 127)
     {
-      s->text[_size] = _c;
-      _size++;
-      s->text[_size] = 0;
+      s->text[s->selected++] = _c;
+      s->text[s->selected] = 0;
+      //s->selected++;
+      s->n++;
     }
     else if (_c == 8)
     {
-      if (_size > 0)
+      if (s->n > 0)
       {
-        _size--;
-        s->text[_size] = 0;
+        s->selected--;
+        s->n--;
+        s->text[s->selected] = 0;
       }
     }
   }
@@ -206,9 +209,9 @@ void textBox(struct textBoxHandle *s, char _c, int _tsx, int _tsy)
   display.fillRect(s->x + 1, s->y + 1, _w - 2, _h - 2, WHITE);   //Clear prevoius text
   display.setCursor(s->x + 2, s->y + 2);
 
-  if (_size > s->size)
+  if (s->n > s->size)
   {
-    _startPos = _size - s->size;
+    _startPos = s->n - s->size;
   }
 
   for (i = 0; (s->text[i + _startPos] != 0) && (i < s->size); i++)
