@@ -32,15 +32,15 @@ int shiftKey = 0;
 
 struct textBoxHandle
 {
-  static const uint8_t maxSize = 101;
-  char text[maxSize];
+  static const uint8_t maxSize = 50;
+  char text[maxSize + 1];
   uint8_t size = 20;
   uint8_t n = 0;
   uint8_t selected = 0;
   uint8_t fontScale = 1;
   int16_t x = 0;
   int16_t y = 0;
-}text;
+} text;
 
 void setup() {
   // put your setup code here, to run once:
@@ -50,7 +50,7 @@ void setup() {
   text.x = 10;
   text.y = 100;
   text.size = 15;
-  text.fontScale = 3;
+  text.fontScale = 5;
   textBox(&text, 0, -1, -1);
   display.display();
 }
@@ -87,11 +87,11 @@ void loop() {
     }
     //textBox(10, 100, 20, str, c, 3, ts[0], ts[1]);
     textBox(&text, c, ts[0], ts[1]);
-    unsigned long t1, t2;
-    t1 = millis();
+    //unsigned long t1, t2;
+    //t1 = millis();
     display.partialUpdate(true);
-    t2 = millis();
-    Serial.println(t2 - t1);
+    //t2 = millis();
+    //Serial.println(t2 - t1);
   }
 }
 
@@ -171,62 +171,67 @@ bool readTouch(int *t) {
   return 0;
 }
 
-//void textBox(int _x, int _y, int _n, char* _s, char _c, int _fontSize, int _tsx, int _tsy)
 void textBox(struct textBoxHandle *s, char _c, int _tsx, int _tsy)
 {
   int k = 0;
   int _h = (s->fontScale * 8) + 4;
   int _w = (s->fontScale * 6 * s->size) + 4;
-  //int _size = strlen(s->text);
   int _startPos = 0;
   int i = 0;
-  //int _cursor = 0;
 
   //Alter string with new char
-  if (_c != -1) {
-
-    if (_c > 31 && _c < 127)
+  //Check if its new char
+  if (_c != -1)
+  {
+    //If you need to add new char, check if is valid char, if there is room inside string for new char and if selected place is vaild (if its not out of string)
+    //If it's everything ok, put new char in selected place, increment number of chars in string (variable n in struct) and selected place in string
+    if (_c > 31 && _c < 127 && s->n < s->maxSize && s->selected <= s->n)
     {
+      memmove(s->text + s->selected + 1, s->text + s->selected, s->n - s->selected);
       s->text[s->selected++] = _c;
-      s->text[s->selected] = 0;
-      //s->selected++;
       s->n++;
     }
-    else if (_c == 8)
+    //If you need to remove char, on selected place move whole string from that place to end of string to one place to the left
+    else if (_c == 8) //Clean string by moving rest of array
     {
       if (s->n > 0)
       {
-        s->selected--;
+        memmove(s->text + s->selected - 1, s->text + s->selected, s->n - s->selected);
+        if (s->selected > 0) s->selected--;
         s->n--;
-        s->text[s->selected] = 0;
+        s->text[s->n] = 0;
       }
     }
   }
 
-  display.setFont(NULL);                              //Use default 5x7 fonts
+  //Redraw textbox on screen. Only 5x7 fonts are allowed in textbox for now!
+  display.setFont(NULL);
   display.setTextSize(s->fontScale);
-  display.drawRect(s->x, s->y, _w, _h, BLACK);            //Make a text box border
-  display.fillRect(s->x + 1, s->y + 1, _w - 2, _h - 2, WHITE);   //Clear prevoius text
-  display.setCursor(s->x + 2, s->y + 2);
+  display.drawRect(s->x, s->y, _w, _h, BLACK);                    //Make a text box border
+  display.fillRect(s->x + 1, s->y + 1, _w - 2, _h - 2, WHITE);    //Clear prevoius text
+  display.setCursor(s->x + 3, s->y + 2);                          //Set cursor on vaild position (start of the textbox)
 
+  //Calculate from what element string should be printed
   if (s->n > s->size)
   {
     _startPos = s->n - s->size;
   }
 
+  //Start printing string
   for (i = 0; (s->text[i + _startPos] != 0) && (i < s->size); i++)
   {
     display.write(s->text[i + _startPos]);
   }
-  if (_tsx < s->x || _tsx > (s->x + _w) || _tsy < s->y || _tsy > (s->y + _h))
+
+  //Check if there is touch on textbox. If it is, calculate new selected index of string where all new chars will be inserted.
+  if (_tsx > s->x && _tsx < (s->x + _w) && _tsy > s->y && _tsy < (s->y + _h))
   {
-    //display.drawFastVLine((_cursor * _fontSize * 6) + _x + 2, _y + 2, _fontSize * 8, BLACK);
-    display.drawFastVLine((i * s->fontScale * 6) + s->x + 2, s->y + 2, s->fontScale * 8, BLACK);
-  }
-  else
-  { 
     int j = (_tsx - s->x) / 6 / s->fontScale;
-    display.drawFastVLine((j * 6 * s->fontScale) + s->x, s->y + 2, s->fontScale * 8, BLACK);
+    s->selected = j + _startPos;
+    if(s->selected > s->n) s->selected = s->n;
   }
+
+  //Draw cursor on screen
+  display.drawFastVLine(((s->selected - _startPos) * 6 * s->fontScale) + s->x + 1, s->y + 2, s->fontScale * 8, BLACK);
   //You can do this way, because, you will or alter the string by adding new letters or change cursor position, but not both in the same time!
 }
