@@ -1,25 +1,22 @@
-//#include "E_INK.h"
 #include "Inkplate.h"
 #include "driver/rtc_io.h"
-//#include <Adafruit_GFX.h>
-//#include "Fonts/FreeSansOblique18pt7b.h"
 #include "Neucha_Regular17pt7b.h"
 #include "RobotoCondensed_Regular6pt7b.h"
-//#include "Homenaje_Regular17pt7b.h"
 #include "icons.h"
-//#include "touch.h"
 #include <Wire.h>
+#include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include "TSC2046E_Inkplate.h"
 
 //.ttf to .h: https://rop.nl/truetype2gfx/
 //Open Source fonts https://fonts.google.com/
 #define DISPLAY_FONT &Neucha_Regular17pt7b
 #define DISPLAY_FONT_SMALL &RobotoCondensed_Regular6pt7b
 
-//eink display;
 Inkplate display(INKPLATE_1BIT);
-//extern Adafruit_MCP23017 mcp;
+TSC2046E_Inkplate ts;
+SPIClass *mySpi = NULL;
 
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -34,28 +31,20 @@ HTTPClient http;
 Adafruit_BME280 bme;
 struct timeval tm;
 uint64_t timeToWake;
-//----------------------------------INKPLATE CROWDFUNDING----------------------------
-char money[10];
-char sold[10];
-//----------------------------------INKPLATE CROWDFUNDING----------------------------
 
 const char ssid[] = "Biro_WLAN";
 const char pass[] = "CaVex250_H2sH11";
-//const char ssid[] = "Golic_wlan";
-//const char pass[] = "BaDromAnce12589/*-";
-//const char ssid[] = "e-radionica.com";
-//const char pass[] = "croduino";
-//const char ssid[] = "AndroidAP12589";
-//const char pass[] = "sgs7EDGE";
+
 const char DOW[7][4] = {"NED", "PON", "UTO", "SRI", "CET", "PET", "SUB"};
-//const char DOW[7][4] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 const char* oznakeVjetar[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
 const char* strErr = {"ERR!"};
+
 typedef struct vremenskaProg {
   float temp[8], tempMax[8], tempMin[8], pressure[8], pressureSea[8], pressureGnd[8], windSpeed[8], windDir[8], humidity[8];
   int id[8];
   int clouds[8];
   float snow[8];
+  float rain[8];
   char description[8][20], icon[8][4];
   long epoch[8];
   int cond[8];
@@ -71,7 +60,6 @@ typedef struct weatherDay {
 int timeOffset;
 weatherDay dani[6];
 
-//const size_t capacity = JSON_ARRAY_SIZE(2) + JSON_OBJECT_SIZE(1) + 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(12) + 310;
 StaticJsonDocument<2000> doc;
 const size_t capacity2 = 40 * JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(40) + 89 * JSON_OBJECT_SIZE(1) + 41 * JSON_OBJECT_SIZE(2) + 40 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + 31 * JSON_OBJECT_SIZE(7) + 10 * JSON_OBJECT_SIZE(8) + 40 * JSON_OBJECT_SIZE(9) + 9360;
 const char* NTPServer = "hr.pool.ntp.org";
@@ -104,16 +92,15 @@ int timezone;
 unsigned long time2, time3;
 void setup() {
   display.begin();
-  //mcp.digitalWrite(15, HIGH);
-  display.digitalWriteMCP(15, HIGH);
-  display.clearDisplay();
-  //mcp.pinMode(15, OUTPUT);
-  display.pinModeMCP(15, OUTPUT);
-  int n;
+  mySpi = display.getSPIptr();
+  mySpi->begin(14, 12, 13, 15);
+  ts.begin(mySpi, &display, 13, 14);
+  ts.calibrate(800, 3420, 3553, 317, 0, 799, 0, 599);
+
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   WiFi.setHostname("WeatherPaper");
-  //Wire.begin();
+  Wire.begin();
   Serial.begin(115200);
   bme.begin(0x76);
   bme.setSampling(Adafruit_BME280::MODE_FORCED,
@@ -121,48 +108,37 @@ void setup() {
                   Adafruit_BME280::SAMPLING_X1, // pressure
                   Adafruit_BME280::SAMPLING_X1, // humidity
                   Adafruit_BME280::FILTER_OFF   );
-  //initTouch();
   display.setTextWrap(false);
   display.setFont(DISPLAY_FONT);
   display.setTextColor(BLACK, WHITE);
   display.setCursor(0, 24);
-  n = WiFi.scanNetworks();
+  int n = WiFi.scanNetworks();
   if (n > 6) n = 6;
   display.clearDisplay();
   display.setCursor(0, 24);
-  display.println("ESP32 WeatherPaper! Trazenje WiFi Mreza...");
+  display.println("ESP32 WeatherPaper\nTrazenje WiFi Mreza...");
   display.display();
-  //display.print(F("Found:"));
-  display.print(F("Pronadjene WiFi Mreze:"));
   for (int i = 0; i < n; i++) {
     display.setCursor(70, 100 + (i * 35));
     display.print(WiFi.SSID(i));
-    display.print((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? 'O' : '*');
+    display.print((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? ' ' : '*');
     display.print(' ');
     display.print(WiFi.RSSI(i), DEC);
   }
-  //display.einkOn();
-  //display.clean();
   display.partialUpdate();
   display.setCursor(70, 550);
   display.print(F("Spajanje na "));
-  //display.print(F("Connecting to "));
   display.print(ssid);
-  display.print("...");
   delay(250);
-  //display.clean();
-  display.partialUpdate();
-  //display.einkOff();
+  display.partialUpdate(false, true);
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
+    display.print('.');
+    display.partialUpdate(false, true);
   }
-  //display.einkOn();
   display.print("spojeno! Pricekajte...");
-  //display.print("Connected! Please wait!");
-  //display.clean();
   display.partialUpdate();
-  //display.einkOff();
   udp.begin(8888);
   if (!WiFi.hostByName(NTPServer, ntpIp)) {
     noInternet = 1;
@@ -176,135 +152,117 @@ void setup() {
 }
 unsigned long time1 = 0;
 void loop() {
-  //initTouch();
-  //touchSleep();
+  int tsX, tsY;
   gettimeofday(&tm, NULL);
-  //mcp.digitalWrite(15, HIGH);
   display.digitalWriteMCP(15, HIGH);
   rtc_gpio_isolate(GPIO_NUM_12);
   esp_sleep_enable_timer_wakeup((timeToWake - tm.tv_sec) * 1000000ULL); //45 minuta
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
   esp_light_sleep_start();
 
-  /*
-  if (touchAvailable()) {
-    int ts[2];
-    if (readTouch(ts)) {
-      //Serial.print('?');
-      //Serial.print(ts[0], DEC);
-      //Serial.print(' ');
-      //Serial.println(ts[1], DEC);
-      ts[0] = map(ts[0], 2767, 591, 0, 800);
-      ts[1] = map(ts[1], 2559, 384, 0, 600);
-      switch (modeSelect) {
-        case 0:
-          if (ts[1] > 410 && ts[0] > 0 && ts[0] < 800) {
-            selectedDay = ts[0] / 160;
-            drawDays(selectedDay, true);
-            modeSelect = 1;
+  if (ts.available(&tsX, &tsY)) {
+    switch (modeSelect) {
+      case 0:
+        if (tsY > 410 && tsX > 0 && tsX < 800) {
+          selectedDay = tsX / 160;
+          drawDays(selectedDay, true);
+          modeSelect = 1;
+        }
+
+        if (tsX > 25 && tsX < 75 && tsY > 75 && tsY < 125) {
+          selectedDay = 0;
+          drawDays(selectedDay, true);
+          modeSelect = 1;
+        }
+
+        if (tsY > 0 && tsY < 30 && tsX > 770 && tsX < 800) {
+          display.setFont(DISPLAY_FONT);
+          display.setCursor(610, 35);
+          writeInfoBox(350, "Osvjez. podataka, pricekajte");
+          display.partialUpdate();
+          forcedRef = 1;
+        }
+        break;
+
+      case 1:
+        if (tsY > 500 && tsX > 700 && tsX < 800) {
+          refresh();
+          modeSelect = 0;
+          selectedDay = 0;
+        }
+        if (tsX > 0 && tsX < 75 && tsY > 0 &&tsY < 50 && selectedDay > 0) {
+          selectedDay--;
+          drawDays(selectedDay, false);
+          modeSelect = 1;
+        }
+        if (tsX > 730 && tsX < 800 && tsY > 0 && tsY < 50 && selectedDay < 4) {
+          selectedDay++;
+          drawDays(selectedDay, false);
+          modeSelect = 1;
+        }
+
+        if (tsY > 80 && tsY < 180) {
+          display.fillRect(198, 198, 404, 304, BLACK);
+          display.fillRect(200, 200, 400, 300, WHITE);
+          int selectedHour = tsX / 100;
+          int _offset = (timeOffset > 0 && timeOffset < 4) ? 1 : 0;
+          int _yPos = 240;
+          const int _fontScale = 2;
+          const int _fontYSize = 14 * _fontScale;
+          if (selectedHour <= prognozaDani[selectedDay + _offset].nData) {
+            display.setFont(DISPLAY_FONT_SMALL);
+            display.setTextSize(_fontScale);
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Opis: ");
+            changeLetters(prognozaDani[selectedDay + _offset].description[selectedHour]);
+            display.print(prognozaDani[selectedDay + _offset].description[selectedHour]);
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Temp.: ");
+            display.print(prognozaDani[selectedDay + _offset].tempMin[selectedHour], 1);
+            display.print("[Min] / ");
+            display.print(prognozaDani[selectedDay + _offset].temp[selectedHour], 1);
+            display.print(" / ");
+            display.print(prognozaDani[selectedDay + _offset].tempMax[selectedHour], 1);
+            display.print("[Max] C");
+
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Tlak zraka: ");
+            display.print(prognozaDani[selectedDay + _offset].pressure[selectedHour], 1);
+            display.print("hPa");
+
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Brzina vjetra: ");
+            display.print(prognozaDani[selectedDay + _offset].windSpeed[selectedHour], 1);
+            display.print("m/s");
+
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Smjer vjetra: ");
+            display.print(prognozaDani[selectedDay + _offset].windDir[selectedHour], 1);
+            display.print(" stupnjeva / ");
+            display.print(oznakeVjetar[int((prognozaDani[selectedDay + _offset].windDir[selectedHour] / 22.5) + .5) % 16]);
+
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Naoblaka: ");
+            display.print(prognozaDani[selectedDay + _offset].clouds[selectedHour], 1);
+            display.print('%');
+
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Snijeg: ");
+            display.print(prognozaDani[selectedDay + _offset].snow[selectedHour], 1);
+            display.print("mm");
+
+            display.setCursor(220, _yPos);  _yPos += _fontYSize;
+            display.print("Kisa: ");
+            display.print(prognozaDani[selectedDay + _offset].rain[selectedHour], 1);
+            display.print("mm");
           }
-
-          if (ts[0] > 25 && ts[0] < 75 && ts[1] > 75 && ts[1] < 125) {
-            selectedDay = 0;
-            drawDays(selectedDay, true);
-            modeSelect = 1;
-          }
-
-          if (ts[1] > 0 && ts[1] < 30 && ts[0] > 770 && ts[0] < 800) {
-            display.setFont(DISPLAY_FONT);
-            display.setCursor(610, 35);
-            //display.print("Pricekajte...");
-            writeInfoBox(350, "Osvjez. podataka, pricekajte");
-            //display.print("Please wait!");
-            //WAKEUP_SET;
-            //VCOM_SET;
-            //display.einkOn();
-            //display.clean();
-            display.partialUpdate();
-            //display.einkOff();
-            //VCOM_CLEAR;
-            //WAKEUP_CLEAR;
-            forcedRef = 1;
-          }
-          break;
-
-        case 1:
-          if (ts[1] > 500 && ts[0] > 700 && ts[0] < 800) {
-            refresh();
-            modeSelect = 0;
-            selectedDay = 0;
-          }
-          if (ts[0] > 0 && ts[0] < 75 && ts[1] > 0 && ts[1] < 50 && selectedDay > 0) {
-            selectedDay--;
-            drawDays(selectedDay, false);
-            modeSelect = 1;
-          }
-          if (ts[0] > 730 && ts[0] < 800 && ts[1] > 0 && ts[1] < 50 && selectedDay < 4) {
-            selectedDay++;
-            drawDays(selectedDay, false);
-            modeSelect = 1;
-          }
-
-          if (ts[1] > 80 && ts[1] < 180) {
-            display.fillRect(198, 198, 404, 304, BLACK);
-            display.fillRect(200, 200, 400, 300, WHITE);
-            int selectedHour = ts[0] / 100;
-            int _offset = (timeOffset > 0 && timeOffset < 4) ? 1 : 0;
-            if (selectedHour <= prognozaDani[selectedDay + _offset].nData) {
-              display.setFont(DISPLAY_FONT_SMALL);
-              display.setCursor(220, 240);
-              display.print("Opis: ");
-              changeLetters(prognozaDani[selectedDay + _offset].description[selectedHour]);
-              display.print(prognozaDani[selectedDay + _offset].description[selectedHour]);
-              display.setCursor(220, 254);
-              display.print("Temperatura zraka: ");
-              display.print(prognozaDani[selectedDay + _offset].tempMin[selectedHour], 1);
-              display.print("[Min] / ");
-              display.print(prognozaDani[selectedDay + _offset].temp[selectedHour], 1);
-              display.print(" / ");
-              display.print(prognozaDani[selectedDay + _offset].tempMax[selectedHour], 1);
-              display.print("[Max] C");
-
-              display.setCursor(220, 268);
-              display.print("Atmosferski tlak zraka: ");
-              display.print(prognozaDani[selectedDay + _offset].pressure[selectedHour], 1);
-              display.print("hPa");
-
-              display.setCursor(220, 282);
-              display.print("Brzina vjetra: ");
-              display.print(prognozaDani[selectedDay + _offset].windSpeed[selectedHour], 1);
-              display.print("m/s");
-
-              display.setCursor(220, 296);
-              display.print("Smjer vjetra: ");
-              display.print(prognozaDani[selectedDay + _offset].windDir[selectedHour], 1);
-              display.print(" stupnjeva / ");
-              display.print(oznakeVjetar[int((prognozaDani[selectedDay + _offset].windDir[selectedHour] / 22.5) + .5) % 16]);
-
-              display.setCursor(220, 310);
-              display.print("Naoblaka: ");
-              display.print(prognozaDani[selectedDay + _offset].clouds[selectedHour], 1);
-              display.print('%');
-
-              display.setCursor(220, 324);
-              display.print("Snijeg: ");
-              display.print(prognozaDani[selectedDay + _offset].snow[selectedHour], 1);
-              display.print("mm");
-            }
-            display.partialUpdate();
-          }
-          break;
-
-      }
-      //Serial.print(ts[0], DEC);
-      //Serial.print(' ');
-      //Serial.println(ts[1], DEC);
-
+          display.setTextSize(1);
+          display.partialUpdate();
+        }
+        break;
     }
   }
-  */
-  //if ((unsigned long)(millis() - time1) > 300000) {
-  //  time1 = millis();
+
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER || forcedRef) {
     forcedRef = 0;
     esp_wifi_start();
@@ -369,30 +327,11 @@ void readNTP() {
     udp.read(ntpPacket, 48);
     uint32_t unix = ntpPacket[40] << 24 | ntpPacket[41] << 16 | ntpPacket[42] << 8 | ntpPacket[43];
     unix = unix - 2208988800UL + timezone;
-    //sec = unix % 60;
-    //minu = unix / 60 % 60;
-    //hr = unix / 3600 % 24;
     td = epochDate(unix);
   }
 }
 void readWeather() {
   int i;
-  if (http.begin(F("http://api.thingspeak.com/apps/thinghttp/send_request?api_key=N3VWH3B5BO9F56M5"))) {
-    String inputData;
-    if (http.GET() > 0) {
-      inputData = http.getString();
-    }
-    inputData.toCharArray(money, 10);
-  }
-
-  if (http.begin(F("https://api.thingspeak.com/apps/thinghttp/send_request?api_key=DEVUKRQO2BQPX6I8"))) {
-    String inputData;
-    if (http.GET() > 0) {
-      inputData = http.getString();
-    }
-    inputData.trim();
-    inputData.toCharArray(sold, 4);
-  }
 
   typedef struct wforecast {
     float temp, tempMax, tempMin, pressure, pressureSea, pressureGnd, windSpeed, windDir;
@@ -402,12 +341,10 @@ void readWeather() {
     int cond;
     int clouds;
     float snow;
+    float rain;
   };
   wforecast prognoza[40];
   if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {   //Belisce
-    //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&id=3186886&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {              //Zagreb
-    //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&id=3221033&units=metric&lang=en&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {            //Hannover
-    //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&id=3193935&units=metric&lang=en&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {            //Osijek[EN]
     if (http.GET() > 0) {
       String APIData;
       //DynamicJsonDocument doc(capacity);
@@ -443,9 +380,6 @@ void readWeather() {
 
   //Uhvati podatke s APIa s Interneta, te ih smjesti u polje struktura (privremeno)
   if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) { //Belisce
-    //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?&id=3186886&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {   //Zagreb
-    //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?&id=3221033&units=metric&lang=en&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) { //Hannover
-    //if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?&id=3193935&units=metric&lang=en&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) { //Osijek[EN]
     if (http.GET() > 0) {
       String APIData;
       APIData = http.getString();
@@ -475,6 +409,7 @@ void readWeather() {
         prognoza[i].cond = list_weather["id"];
         prognoza[i].clouds = listDate["clouds"]["all"];
         prognoza[i].snow = listDate["snow"]["3h"];
+        prognoza[i].rain = listDate["rain"]["3h"];
         strncpy(prognoza[i].icon, list_weather["icon"] | strErr, 3);
         strncpy(prognoza[i].description, list_weather["description"] | strErr, 19);
         prognoza[i].windSpeed = list_wind["speed"];
@@ -505,6 +440,7 @@ void readWeather() {
             prognozaDani[i].cond[j] = prognoza[i * 8 + j].cond;
             prognozaDani[i].clouds[j] = prognoza[i * 8 + j].clouds;
             prognozaDani[i].snow[j] = prognoza[i * 8 + j].snow;
+            prognozaDani[i].rain[j] = prognoza[i * 8 + j].rain;
             strncpy(prognozaDani[i].icon[j], prognoza[i * 8 + j].icon, 4);
             strncpy(prognozaDani[i].description[j], prognoza[i * 8 + j].description, 20);
           }
@@ -525,6 +461,7 @@ void readWeather() {
           prognozaDani[0].cond[i] = prognoza[i].cond;
           prognozaDani[0].clouds[i] = prognoza[i].clouds;
           prognozaDani[0].snow[i] = prognoza[i].snow;
+          prognozaDani[0].rain[0] = prognoza[i].rain;
           strncpy(prognozaDani[0].icon[i], prognoza[i].icon, 4);
           strncpy(prognozaDani[0].description[i], prognoza[i].description, 20);
         }
@@ -547,6 +484,7 @@ void readWeather() {
             prognozaDani[i + 1].cond[j] = prognoza[z].cond;
             prognozaDani[i + 1].clouds[j] = prognoza[z].clouds;
             prognozaDani[i + 1].snow[j] = prognoza[z].snow;
+            prognozaDani[i + 1].rain[j] = prognoza[z].rain;
             strncpy(prognozaDani[i + 1].icon[j], prognoza[z].icon, 4);
             strncpy(prognozaDani[i + 1].description[j], prognoza[z].description, 20);
           }
@@ -567,6 +505,7 @@ void readWeather() {
           prognozaDani[5].cond[k] = prognoza[i].cond;
           prognozaDani[5].clouds[k] = prognoza[i].cond;
           prognozaDani[5].snow[k] = prognoza[i].snow;
+          prognozaDani[5].rain[k] = prognoza[i].rain;
           strncpy(prognozaDani[5].icon[k], prognoza[i].icon, 3);
           strncpy(prognozaDani[5].description[k], prognoza[i].description, 20);
           k++;
@@ -623,38 +562,27 @@ void refresh() {
   display.setTextSize(1);
   display.fillRect(20, 360, 760, 3, BLACK);
   display.setFont(DISPLAY_FONT_SMALL);
-  display.setCursor(4, 65);
+  display.setTextSize(2);
+  display.setCursor(1, 70);
   display.print(opis);
-  display.setCursor(5, 34);
+  display.setCursor(1, 20);
   display.print(F("Belisce"));
-  display.setCursor(5, 46);
+  display.setTextSize(1);
+  display.setCursor(1, 46);
   display.print(F("Powered by openweathermaps.org"));
   display.drawBitmap(770, 0, refIcon, 30, 30, BLACK);
 
-  sprintf(tmp, "%1d:%02d %d/%d/%4d %3s", td.h, td.m, td.d, td.mo, td.y, DOW[td.dow]);
+  sprintf(tmp, "%1d:%02d %d/%d/%04d %3s", td.h, td.m, td.d, td.mo, td.y, DOW[td.dow]);
   display.setFont(DISPLAY_FONT);
   display.fillRect(4, 50, 796, 3, BLACK);
   display.setCursor(267, 35);
   display.print(tmp);
 
-  //----------------------------------INKPLATE CROWDFUNDING----------------------------
-//  display.setCursor(600, 180);
-//  display.print(F("Inkplate"));
-//  display.setCursor(550, 240);
-//  display.print(F("Raised "));
-//  display.print(money);
-//  display.print('$');
-//  display.setCursor(550, 300);
-//  display.print(F("Claimed "));
-//  display.print(sold);
-
-  //----------------------------------INKPLATE CROWDFUNDING----------------------------
-
-  display.drawBitmap(20, 75, weatherIcon(icon), 50, 50, BLACK);
+  display.drawBitmap(20, 85, weatherIcon(icon), 50, 50, BLACK);
   display.setTextSize(2);
-  display.setCursor(80, 120);
+  display.setCursor(80, 130);
   display.print(temperature, 0);
-  display.setCursor(display.getCursorX() + 5, 100);
+  display.setCursor(display.getCursorX() + 5, 110);
   display.print('o');
   display.setTextSize(1);
   display.drawBitmap(1, 140, iconTlak, 40, 40, BLACK);
@@ -678,15 +606,15 @@ void refresh() {
   display.print(tmp);
 
   display.drawBitmap(300, 70, indoorIcon, 40, 40, BLACK);
-  display.setCursor(300, 170);
+  display.drawBitmap(300, 140, iconTlak, 40, 40, BLACK);
+  display.setCursor(350, 170);
   display.print(bmePress, 1);
-  display.print("hPa");
-  display.setCursor(300, 220);
+  display.drawBitmap(300, 190, iconVlaga, 40, 40, BLACK);
+  display.setCursor(350, 220);
   display.print(bmeHum, 1);
-  display.print('%');
-  display.setCursor(300, 270);
+  display.drawBitmap(300, 240, iconTemp, 40, 40, BLACK);
+  display.setCursor(350, 270);
   display.print(bmeTemp, 1);
-  display.print('C');
 
   int k = (timeOffset > 0 && timeOffset < 4) ? 1 : 0;
   int xOffset, xOffsetText;
@@ -706,28 +634,23 @@ void refresh() {
     display.print('.');
     display.print(epochDate(prognozaDani[i - 1 + k].epoch[0]).mo);
     display.setCursor(xOffsetText - 10, 575);
-    //display.print("1003 hPa  57%");
     display.print(dani[i - 1 + k].pressure, 1);
     display.print("hPa  ");
     display.print(dani[i - 1 + k].humidity, 1);
     display.print('%');
     display.setCursor(xOffsetText - 10, 588);
-    //display.print("5.6 m/s W");
     display.print(dani[i - 1 + k].windSpeed, 1);
     display.print("m/s ");
     display.print(oznakeVjetar[int((dani[i - 1 + k].windDir / 22.5) + .5) % 16]);
     display.print(' ');
-    //display.print("   10.1 m/s W");
     display.print(dani[i - 1 + k].windSpeedMax, 1);
     display.print("m/s");
     display.setFont(DISPLAY_FONT);
     display.setCursor(xOffsetText, 520);
-    //display.print("22");
     display.print(dani[i - 1 + k].tempMax, 1);
     display.setCursor(display.getCursorX() + 5, 510);
     display.print("o");
     display.setCursor(xOffsetText, 555);
-    //display.print("7");
     display.print(dani[i - 1 + k].tempMin, 1);
     display.setCursor(display.getCursorX() + 5, 545);
     display.print('o');
@@ -748,21 +671,8 @@ void refresh() {
     display.setTextSize(2);
     display.setCursor(170, 470);
     display.print("Nema Interneta");
-    //display.print(" No Internet");
   }
-  //WAKEUP_SET;
-  //VCOM_SET;
-  //display.einkOn();
-  //time2 = millis();
-  //display.clean();
   display.display();
-  //time3 = millis();
-  //delay(100);
-  //display.einkOff();
-  //VCOM_CLEAR;
-  //WAKEUP_CLEAR;
-  //Serial.println("Ref time:");
-  //Serial.print(time3 - time2, DEC);
 }
 
 uint8_t* weatherIcon(uint8_t i) {
@@ -865,13 +775,15 @@ void drawDays(uint8_t n, bool fullUpdate) {
   n += (timeOffset > 0 && timeOffset < 4) ? 1 : 0;
   display.clearDisplay();
   display.setFont(DISPLAY_FONT_SMALL);
+  display.setTextSize(2);
   for (int i = 0; i < prognozaDani[n].nData; i++) {
     dayHours[i] = epochDate(prognozaDani[n].epoch[i]).h;
     display.drawBitmap(i * 95 + 45, 100, weatherIcon(atoi(prognozaDani[n].icon[i])), 50, 50, BLACK);
-    display.setCursor(i * 95 + 60, 160);
+    display.setCursor(i * 95 + 30, 170);
     display.print(dayHours[i], DEC);
-    display.print('h');
+    display.print(":00h");
   }
+  display.setTextSize(1);
   drawGraph(80, 250, dayHours, prognozaDani[n].temp, "h", "C", 250, 130, prognozaDani[n].nData, 1, 7);
   drawGraph(480, 250, dayHours, prognozaDani[n].pressure, "h", "hPa", 250, 130, prognozaDani[n].nData, 1, 7);
   drawGraph(80, 420, dayHours, prognozaDani[n].humidity, "h", "%", 250, 130, prognozaDani[n].nData, 0, 7);
@@ -884,20 +796,16 @@ void drawDays(uint8_t n, bool fullUpdate) {
   display.fillRect(4, 50, 796, 3, BLACK);
   display.setCursor(200, 35);
   display.print("Vremenska prognoza za ");
-  //display.print("Weather on ");
   display.print(epochDate(prognozaDani[n].epoch[0]).d, DEC);
   display.print('.');
   display.print(epochDate(prognozaDani[n].epoch[0]).mo, DEC);
   display.print(".,");
   display.print(DOW[epochDate(prognozaDani[n].epoch[0]).dow]);
-  //display.einkOn();
   if (fullUpdate) {
-    //display.clean();
     display.display();
   } else {
     display.partialUpdate();
   }
-  //display.einkOff();
 }
 void drawGraph(int x, int y, char *dx, float *dy, char *tx, char *ty, int sizex, int sizey, char n, char decimal, char yelements) {
   char digits = 0;
@@ -907,8 +815,6 @@ void drawGraph(int x, int y, char *dx, float *dy, char *tx, char *ty, int sizex,
   float stepY;
   int stepYGraph;
   for (int i = 0; i < n; i++) {
-    //if (maxValueX < dx[i]) maxValueX = dx[i];
-    //if (minValueX > dx[i]) minValueX = dx[i];
     if (maxValueY < dy[i]) maxValueY = dy[i];
     if (minValueY > dy[i]) minValueY = dy[i];
   }
@@ -919,12 +825,6 @@ void drawGraph(int x, int y, char *dx, float *dy, char *tx, char *ty, int sizex,
   stepX = sizex / n;
   display.setFont(NULL);
   display.setTextSize(1);
-  //display.setCursor(x, y);
-  //display.print(maxValueY, decimal);
-  //display.setCursor(x, y + sizey);
-  //display.print(minValueY, decimal);
-  //minValueY -= 5;
-  //maxValueY += 5;
   int x1, y1, x2, y2;
   for (int i = 0; i < n - 1; i++) {
     x1 = i * stepX + x + (digits * 6);
