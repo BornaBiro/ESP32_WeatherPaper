@@ -156,7 +156,7 @@ void loop() {
   gettimeofday(&tm, NULL);
   display.digitalWriteMCP(15, HIGH);
   rtc_gpio_isolate(GPIO_NUM_12);
-  esp_sleep_enable_timer_wakeup((timeToWake - tm.tv_sec) * 1000000ULL); //45 minuta
+  esp_sleep_enable_timer_wakeup((timeToWake - tm.tv_sec) * 1000000ULL); //20 minuta
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
   esp_light_sleep_start();
 
@@ -265,6 +265,10 @@ void loop() {
 
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER || forcedRef) {
     forcedRef = 0;
+    display.setFont(DISPLAY_FONT_SMALL);
+    display.setTextSize(1);
+    display.setCursor(550, 46);
+    display.print("Citanje novih podataka");
     esp_wifi_start();
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, pass);
@@ -273,6 +277,11 @@ void loop() {
       delay(1000);
       i++;
       if (i > 15) break;
+      if (!(i % 2))
+      {
+        display.print('.');
+        display.partialUpdate();
+      }
     }
 
     if (i < 15) {
@@ -543,7 +552,7 @@ void readWeather() {
     }
   }
   gettimeofday(&tm, NULL);
-  timeToWake = 1800 + tm.tv_sec;
+  timeToWake = 1200 + tm.tv_sec;
 }
 
 void changeLetters(char *p) {
