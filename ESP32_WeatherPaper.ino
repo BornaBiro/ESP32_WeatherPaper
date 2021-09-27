@@ -8,6 +8,9 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 #include "TSC2046E_Inkplate.h"
+#include "sys/time.h"
+
+#include "structs.h"
 
 //.ttf to .h: https://rop.nl/truetype2gfx/
 //Open Source fonts https://fonts.google.com/
@@ -29,8 +32,11 @@ WiFiUDP udp;
 WiFiClient client;
 HTTPClient http;
 Adafruit_BME280 bme;
-struct timeval tm;
+
+timeval tm;
+const timeval* tmPtr = &tm;
 uint64_t timeToWake;
+int timeOffset;
 
 const char ssid[] = "Biro_WLAN";
 const char pass[] = "CaVex250_H2sH11";
@@ -39,54 +45,19 @@ const char DOW[7][4] = {"NED", "PON", "UTO", "SRI", "CET", "PET", "SUB"};
 const char* oznakeVjetar[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
 const char* strErr = {"ERR!"};
 
-typedef struct vremenskaProg {
-  float temp[8], tempMax[8], tempMin[8], pressure[8], pressureSea[8], pressureGnd[8], windSpeed[8], windDir[8], humidity[8];
-  int id[8];
-  int clouds[8];
-  float snow[8];
-  float rain[8];
-  char description[8][20], icon[8][4];
-  long epoch[8];
-  int cond[8];
-  int nData;
-};
-vremenskaProg prognozaDani[6];
-
-typedef struct weatherDay {
-  float tempMax, tempMin, pressure, windSpeed, windDir, windSpeedMax, humidity;
-  int cond;
-};
-
-int timeOffset;
-weatherDay dani[6];
-
 StaticJsonDocument<2000> doc;
 const size_t capacity2 = 40 * JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(40) + 89 * JSON_OBJECT_SIZE(1) + 41 * JSON_OBJECT_SIZE(2) + 40 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + 31 * JSON_OBJECT_SIZE(7) + 10 * JSON_OBJECT_SIZE(8) + 40 * JSON_OBJECT_SIZE(9) + 9360;
-const char* NTPServer = "hr.pool.ntp.org";
-uint16_t ntpPort = 123;
-IPAddress ntpIp;
-uint8_t ntpPacket[48];
 char opis[70];
 int icon = 1;
-float temperature, bmeTemp, bmeHum, bmePress, windSpeed;
+float temperature, windSpeed;
 int hum, pres, windDir;
 const char* desc;
-uint8_t sec, minu, hr;
 uint32_t sunrise, sunset;
 uint8_t noInternet = 0;
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
 uint8_t selectedDay = 0;
 
-struct ntpInfo {
-  uint8_t h;
-  uint8_t m;
-  uint8_t s;
-  uint8_t d;
-  uint8_t mo;
-  uint16_t y;
-  uint8_t dow;
-} td;
 int timezone;
 
 unsigned long time2, time3;
@@ -129,7 +100,6 @@ void setup() {
   display.setCursor(70, 550);
   display.print(F("Spajanje na "));
   display.print(ssid);
-  delay(250);
   display.partialUpdate(false, true);
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED) {
@@ -139,43 +109,55 @@ void setup() {
   }
   display.print("spojeno! Pricekajte...");
   display.partialUpdate();
-  udp.begin(8888);
-  if (!WiFi.hostByName(NTPServer, ntpIp)) {
-    noInternet = 1;
-  }
-  readSensor();
+
+  readSensor(&sensor);
   readWeather();
-  readNTP();
+  if (readNTP(&tm.tv_sec))
+  {
+    settimeofday(tmPtr, NULL);
+    tNow = epochToHuman(tm.tv_sec);
+  }
+  gettimeofday(&tm, NULL);
+  timeToWake = 1200 + tm.tv_sec;
   refresh();
   esp_wifi_stop();
   btStop();
 }
-unsigned long time1 = 0;
+
 void loop() {
   int tsX, tsY;
-  gettimeofday(&tm, NULL);
   display.digitalWriteMCP(15, HIGH);
   rtc_gpio_isolate(GPIO_NUM_12);
+  gettimeofday(&tm, NULL);
+  Serial.println(timeToWake, DEC);
+  Serial.println(tm.tv_sec, DEC);
+  Serial.println("-------");
+  Serial.flush();
   esp_sleep_enable_timer_wakeup((timeToWake - tm.tv_sec) * 1000000ULL); //20 minuta
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
   esp_light_sleep_start();
 
-  if (ts.available(&tsX, &tsY)) {
-    switch (modeSelect) {
+  if (ts.available(&tsX, &tsY))
+  {
+    switch (modeSelect)
+    {
       case 0:
-        if (tsY > 410 && tsX > 0 && tsX < 800) {
+        if (tsY > 410 && tsX > 0 && tsX < 800)
+        {
           selectedDay = tsX / 160;
           drawDays(selectedDay, true);
           modeSelect = 1;
         }
 
-        if (tsX > 25 && tsX < 75 && tsY > 75 && tsY < 125) {
+        if (tsX > 25 && tsX < 75 && tsY > 75 && tsY < 125)
+        {
           selectedDay = 0;
           drawDays(selectedDay, true);
           modeSelect = 1;
         }
 
-        if (tsY > 0 && tsY < 30 && tsX > 770 && tsX < 800) {
+        if (tsY > 0 && tsY < 30 && tsX > 770 && tsX < 800)
+        {
           display.setFont(DISPLAY_FONT);
           display.setCursor(610, 35);
           writeInfoBox(350, "Osvjez. podataka, pricekajte");
@@ -185,23 +167,27 @@ void loop() {
         break;
 
       case 1:
-        if (tsY > 500 && tsX > 700 && tsX < 800) {
+        if (tsY > 500 && tsX > 700 && tsX < 800)
+        {
           refresh();
           modeSelect = 0;
           selectedDay = 0;
         }
-        if (tsX > 0 && tsX < 75 && tsY > 0 &&tsY < 50 && selectedDay > 0) {
+        if (tsX > 0 && tsX < 75 && tsY > 0 && tsY < 50 && selectedDay > 0)
+        {
           selectedDay--;
           drawDays(selectedDay, false);
           modeSelect = 1;
         }
-        if (tsX > 730 && tsX < 800 && tsY > 0 && tsY < 50 && selectedDay < 4) {
+        if (tsX > 730 && tsX < 800 && tsY > 0 && tsY < 50 && selectedDay < 4)
+        {
           selectedDay++;
           drawDays(selectedDay, false);
           modeSelect = 1;
         }
 
-        if (tsY > 80 && tsY < 180) {
+        if (tsY > 80 && tsY < 180)
+        {
           display.fillRect(198, 198, 404, 304, BLACK);
           display.fillRect(200, 200, 400, 300, WHITE);
           int selectedHour = tsX / 100;
@@ -209,7 +195,8 @@ void loop() {
           int _yPos = 240;
           const int _fontScale = 2;
           const int _fontYSize = 14 * _fontScale;
-          if (selectedHour <= prognozaDani[selectedDay + _offset].nData) {
+          if (selectedHour <= prognozaDani[selectedDay + _offset].nData)
+          {
             display.setFont(DISPLAY_FONT_SMALL);
             display.setTextSize(_fontScale);
             display.setCursor(220, _yPos);  _yPos += _fontYSize;
@@ -263,12 +250,13 @@ void loop() {
     }
   }
 
-  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER || forcedRef) {
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER || forcedRef)
+  {
     forcedRef = 0;
     display.setFont(DISPLAY_FONT_SMALL);
     display.setTextSize(1);
     display.setCursor(550, 46);
-    display.print("Citanje novih podataka");
+    display.print("Dohvacanje novih podataka");
     esp_wifi_start();
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, pass);
@@ -285,9 +273,11 @@ void loop() {
     }
 
     if (i < 15) {
-      readSensor();
+      readSensor(&sensor);
       readWeather();
-      readNTP();
+      gettimeofday(&tm, NULL);
+      tNow = epochToHuman(tm.tv_sec);
+      timeToWake = 1200 + tm.tv_sec;
       refresh();
     }
     esp_wifi_stop();
@@ -311,14 +301,22 @@ void writeInfoBox(int y, char* c) {
   display.setTextSize(1);
 }
 
-void readSensor() {
+void readSensor(struct sensorData *_s) {
   bme.takeForcedMeasurement();
-  bmeTemp = bme.readTemperature();
-  bmeHum = bme.readHumidity();
-  bmePress = bme.readPressure() / 100.0F;
+  _s->temp = bme.readTemperature();
+  _s->humidity = bme.readHumidity();
+  _s->pressure = bme.readPressure() / 100.0F;
 }
-void readNTP() {
-  memset(ntpPacket, 0, 48);
+
+bool readNTP(time_t *_epoch) {
+  IPAddress ntpIp;
+  const char* NTPServer = "hr.pool.ntp.org";
+  uint16_t ntpPort = 123;
+  uint8_t ntpPacket[48];
+
+  udp.begin(8888);
+  if (!WiFi.hostByName(NTPServer, ntpIp)) return 0;
+  
   ntpPacket[0] = B11100011; //Clock is unsync, NTP version 4, Symmetric passive
   ntpPacket[1] = 0;     // Stratum, or type of clock
   ntpPacket[2] = 60;     // Polling Interval
@@ -332,12 +330,14 @@ void readNTP() {
   udp.write(ntpPacket, 48);
   udp.endPacket();
   delay(1500);
-  if (udp.parsePacket()) {
+  if (udp.parsePacket())
+  {
     udp.read(ntpPacket, 48);
     uint32_t unix = ntpPacket[40] << 24 | ntpPacket[41] << 16 | ntpPacket[42] << 8 | ntpPacket[43];
-    unix = unix - 2208988800UL + timezone;
-    td = epochDate(unix);
+    *_epoch = unix - 2208988800UL + timezone;
+    return true;
   }
+  return false;
 }
 void readWeather() {
   int i;
@@ -399,13 +399,11 @@ void readWeather() {
       JsonObject listDate = list[0];
       JsonObject list_main = listDate["main"];
       JsonObject list_weather = listDate["weather"][0];
-      //JsonObject list_clouds = listDate["clouds"];
       JsonObject list_wind = listDate["wind"];
       for (i = 0; i < 40; i++) {
         listDate = list[i];
         list_main = listDate["main"];
         list_weather = listDate["weather"][0];
-        //list_clouds = listDate["clouds"]["all"];
         list_wind = listDate["wind"];
         prognoza[i].epoch = listDate["dt"];
         prognoza[i].temp = list_main["temp"];
@@ -425,8 +423,8 @@ void readWeather() {
         prognoza[i].windDir = list_wind["deg"];
       }
       i = 0;
-      while (epochDate(prognoza[i].epoch).h != 0) {
-        //epochDate(prognoza[i].epoch);
+      while (epochToHuman(prognoza[i].epoch).tm_hour != 0)
+      {
         i++;
       };
       timeOffset = i;
@@ -551,8 +549,6 @@ void readWeather() {
       return;
     }
   }
-  gettimeofday(&tm, NULL);
-  timeToWake = 1200 + tm.tv_sec;
 }
 
 void changeLetters(char *p) {
@@ -581,7 +577,8 @@ void refresh() {
   display.print(F("Powered by openweathermaps.org"));
   display.drawBitmap(770, 0, refIcon, 30, 30, BLACK);
 
-  sprintf(tmp, "%1d:%02d %d/%d/%04d %3s", td.h, td.m, td.d, td.mo, td.y, DOW[td.dow]);
+  sprintf(tmp, "%1d:%02d %d/%d/%04d %3s", tNow.tm_hour, tNow.tm_min, tNow.tm_mday, tNow.tm_mon + 1, tNow.tm_year + 1900, DOW[tNow.tm_wday]);
+
   display.setFont(DISPLAY_FONT);
   display.fillRect(4, 50, 796, 3, BLACK);
   display.setCursor(267, 35);
@@ -617,13 +614,13 @@ void refresh() {
   display.drawBitmap(300, 70, indoorIcon, 40, 40, BLACK);
   display.drawBitmap(300, 140, iconTlak, 40, 40, BLACK);
   display.setCursor(350, 170);
-  display.print(bmePress, 1);
+  display.print(sensor.pressure, 1);
   display.drawBitmap(300, 190, iconVlaga, 40, 40, BLACK);
   display.setCursor(350, 220);
-  display.print(bmeHum, 1);
+  display.print(sensor.humidity, 1);
   display.drawBitmap(300, 240, iconTemp, 40, 40, BLACK);
   display.setCursor(350, 270);
-  display.print(bmeTemp, 1);
+  display.print(sensor.temp, 1);
 
   int k = (timeOffset > 0 && timeOffset < 4) ? 1 : 0;
   int xOffset, xOffsetText;
@@ -639,9 +636,9 @@ void refresh() {
     display.print(prognozaDani[i - 1 + k].description[4]);
     display.setTextSize(1);
     display.setCursor(xOffsetText + 40, 415);
-    display.print(epochDate(prognozaDani[i - 1 + k].epoch[0]).d);
+    display.print(epochToHuman(prognozaDani[i - 1 + k].epoch[0]).tm_mday);
     display.print('.');
-    display.print(epochDate(prognozaDani[i - 1 + k].epoch[0]).mo);
+    display.print(epochToHuman(prognozaDani[i - 1 + k].epoch[0]).tm_mon + 1);
     display.setCursor(xOffsetText - 10, 575);
     display.print(dani[i - 1 + k].pressure, 1);
     display.print("hPa  ");
@@ -664,7 +661,7 @@ void refresh() {
     display.setCursor(display.getCursorX() + 5, 545);
     display.print('o');
     display.setCursor(xOffsetText + 20, 400);
-    display.print(DOW[epochDate(prognozaDani[i - 1 + k].epoch[0]).dow]);
+    display.print(DOW[epochToHuman(prognozaDani[i - 1 + k].epoch[0]).tm_wday]);
   }
 
   for (int i = 1; i < 3; i++) {
@@ -718,65 +715,13 @@ uint8_t* weatherIcon(uint8_t i) {
   }
 }
 
-ntpInfo epochDate(uint32_t epoch) {
-  ntpInfo timeInfo;
-  static unsigned char month_days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-  static unsigned char week_days[7] = {4, 5, 6, 0, 1, 2, 3};
-  //Thu=4, Fri=5, Sat=6, Sun=0, Mon=1, Tue=2, Wed=3
-  unsigned char ntp_hour, ntp_minute, ntp_second, ntp_week_day, ntp_date, ntp_month, leap_days, leap_year_ind ;
-  unsigned short temp_days;
-  unsigned int ntp_year, days_since_epoch, day_of_year;
-
-  leap_days = 0;
-  leap_year_ind = 0;
-
-  ntp_second = epoch % 60;
-  epoch /= 60;
-  ntp_minute = epoch % 60;
-  epoch /= 60;
-  ntp_hour  = epoch % 24;
-  epoch /= 24;
-
-  days_since_epoch = epoch;      //number of days since epoch
-  ntp_week_day = week_days[days_since_epoch % 7]; //Calculating WeekDay
-
-  ntp_year = 1970 + (days_since_epoch / 365); // ball parking year, may not be accurate!
-
-  int i;
-  for (i = 1972; i < ntp_year; i += 4) // Calculating number of leap days since epoch/1970
-    if (((i % 4 == 0) && (i % 100 != 0)) || (i % 400 == 0)) leap_days++;
-
-  ntp_year = 1970 + ((days_since_epoch - leap_days) / 365); // Calculating accurate current year by (days_since_epoch - extra leap days)
-  day_of_year = ((days_since_epoch - leap_days) % 365) + 1;
-
-
-  if (((ntp_year % 4 == 0) && (ntp_year % 100 != 0)) || (ntp_year % 400 == 0))
-  {
-    month_days[1] = 29;   //February = 29 days for leap years
-    leap_year_ind = 1;    //if current year is leap, set indicator to 1
-  }
-  else month_days[1] = 28; //February = 28 days for non-leap years
-
-  temp_days = 0;
-
-  for (ntp_month = 0 ; ntp_month <= 11 ; ntp_month++) //calculating current Month
-  {
-    if (day_of_year <= temp_days) break;
-    temp_days = temp_days + month_days[ntp_month];
-  }
-
-  temp_days = temp_days - month_days[ntp_month - 1]; //calculating current Date
-  ntp_date = day_of_year - temp_days;
-
-  timeInfo.d = ntp_date;
-  timeInfo.mo = ntp_month;
-  timeInfo.y = ntp_year;
-  timeInfo.dow = ntp_week_day;
-  timeInfo.h = ntp_hour;
-  timeInfo.m = ntp_minute;
-  timeInfo.s = ntp_second;
-
-  return timeInfo;
+struct tm epochToHuman(time_t _t)
+{
+  struct tm *_timePtr;
+  struct tm _time;
+  _timePtr = localtime(&_t);
+  memcpy(&_time, _timePtr, sizeof(_time));
+  return _time;
 }
 
 void drawDays(uint8_t n, bool fullUpdate) {
@@ -786,7 +731,7 @@ void drawDays(uint8_t n, bool fullUpdate) {
   display.setFont(DISPLAY_FONT_SMALL);
   display.setTextSize(2);
   for (int i = 0; i < prognozaDani[n].nData; i++) {
-    dayHours[i] = epochDate(prognozaDani[n].epoch[i]).h;
+    dayHours[i] = epochToHuman(prognozaDani[n].epoch[i]).tm_hour;
     display.drawBitmap(i * 95 + 45, 100, weatherIcon(atoi(prognozaDani[n].icon[i])), 50, 50, BLACK);
     display.setCursor(i * 95 + 30, 170);
     display.print(dayHours[i], DEC);
@@ -805,11 +750,11 @@ void drawDays(uint8_t n, bool fullUpdate) {
   display.fillRect(4, 50, 796, 3, BLACK);
   display.setCursor(200, 35);
   display.print("Vremenska prognoza za ");
-  display.print(epochDate(prognozaDani[n].epoch[0]).d, DEC);
+  display.print(epochToHuman(prognozaDani[n].epoch[0]).tm_mday, DEC);
   display.print('.');
-  display.print(epochDate(prognozaDani[n].epoch[0]).mo, DEC);
+  display.print(epochToHuman(prognozaDani[n].epoch[0]).tm_mon + 1, DEC);
   display.print(".,");
-  display.print(DOW[epochDate(prognozaDani[n].epoch[0]).dow]);
+  display.print(DOW[epochToHuman(prognozaDani[n].epoch[0]).tm_wday]);
   if (fullUpdate) {
     display.display();
   } else {
