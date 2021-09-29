@@ -1,26 +1,9 @@
-#include "Inkplate.h"
-#include "driver/rtc_io.h"
-#include "Neucha_Regular17pt7b.h"
-#include "RobotoCondensed_Regular6pt7b.h"
-#include "icons.h"
+// Includes for communication and periph.
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
-#include "TSC2046E_Inkplate.h"
-#include "sys/time.h"
+#include "driver/rtc_io.h"
 
-#include "structs.h"
-
-//.ttf to .h: https://rop.nl/truetype2gfx/
-//Open Source fonts https://fonts.google.com/
-#define DISPLAY_FONT &Neucha_Regular17pt7b
-#define DISPLAY_FONT_SMALL &RobotoCondensed_Regular6pt7b
-
-Inkplate display(INKPLATE_1BIT);
-TSC2046E_Inkplate ts;
-SPIClass *mySpi = NULL;
-
+// WiFi and Internet includes
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <HTTPClient.h>
@@ -28,9 +11,30 @@ SPIClass *mySpi = NULL;
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
 
-WiFiUDP udp;
-WiFiClient client;
-HTTPClient http;
+// Display includes (driver, icons, fonts, etc)
+#include "Inkplate.h"
+#include "Neucha_Regular17pt7b.h"
+#include "RobotoCondensed_Regular6pt7b.h"
+#include "icons.h"
+#include "TSC2046E_Inkplate.h"
+
+// Sensor includes
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
+// Other includes
+#include "sys/time.h"
+#include "structs.h"
+
+//.ttf to .h: https://rop.nl/truetype2gfx/
+//Open Source fonts https://fonts.google.com/
+#define DISPLAY_FONT &Neucha_Regular17pt7b
+#define DISPLAY_FONT_SMALL &RobotoCondensed_Regular6pt7b
+
+// Objects / constructors
+Inkplate display(INKPLATE_1BIT);
+TSC2046E_Inkplate ts;
+SPIClass *mySpi = NULL;
 Adafruit_BME280 bme;
 
 timeval tm;
@@ -45,22 +49,11 @@ const char DOW[7][4] = {"NED", "PON", "UTO", "SRI", "CET", "PET", "SUB"};
 const char* oznakeVjetar[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
 const char* strErr = {"ERR!"};
 
-StaticJsonDocument<2000> doc;
-const size_t capacity2 = 40 * JSON_ARRAY_SIZE(1) + JSON_ARRAY_SIZE(40) + 89 * JSON_OBJECT_SIZE(1) + 41 * JSON_OBJECT_SIZE(2) + 40 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + 31 * JSON_OBJECT_SIZE(7) + 10 * JSON_OBJECT_SIZE(8) + 40 * JSON_OBJECT_SIZE(9) + 9360;
-char opis[70];
-int icon = 1;
-float temperature, windSpeed;
-int hum, pres, windDir;
-const char* desc;
-uint32_t sunrise, sunset;
 uint8_t noInternet = 0;
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
 uint8_t selectedDay = 0;
 
-int timezone;
-
-unsigned long time2, time3;
 void setup() {
   display.begin();
   mySpi = display.getSPIptr();
@@ -129,10 +122,6 @@ void loop() {
   display.digitalWriteMCP(15, HIGH);
   rtc_gpio_isolate(GPIO_NUM_12);
   gettimeofday(&tm, NULL);
-  Serial.println(timeToWake, DEC);
-  Serial.println(tm.tv_sec, DEC);
-  Serial.println("-------");
-  Serial.flush();
   esp_sleep_enable_timer_wakeup((timeToWake - tm.tv_sec) * 1000000ULL); //20 minuta
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
   esp_light_sleep_start();
@@ -310,13 +299,14 @@ void readSensor(struct sensorData *_s) {
 
 bool readNTP(time_t *_epoch) {
   IPAddress ntpIp;
+  WiFiUDP udp;
   const char* NTPServer = "hr.pool.ntp.org";
   uint16_t ntpPort = 123;
   uint8_t ntpPacket[48];
 
   udp.begin(8888);
   if (!WiFi.hostByName(NTPServer, ntpIp)) return 0;
-  
+
   ntpPacket[0] = B11100011; //Clock is unsync, NTP version 4, Symmetric passive
   ntpPacket[1] = 0;     // Stratum, or type of clock
   ntpPacket[2] = 60;     // Polling Interval
@@ -334,13 +324,18 @@ bool readNTP(time_t *_epoch) {
   {
     udp.read(ntpPacket, 48);
     uint32_t unix = ntpPacket[40] << 24 | ntpPacket[41] << 16 | ntpPacket[42] << 8 | ntpPacket[43];
-    *_epoch = unix - 2208988800UL + timezone;
+    *_epoch = unix - 2208988800UL + currentWeather.timezone;
     return true;
   }
   return false;
 }
 void readWeather() {
+  WiFiClient client;
+  HTTPClient http;
+  DynamicJsonDocument doc(30000);
   int i;
+
+  http.useHTTP10(true);
 
   typedef struct wforecast {
     float temp, tempMax, tempMin, pressure, pressureSea, pressureGnd, windSpeed, windDir;
@@ -355,47 +350,41 @@ void readWeather() {
   wforecast prognoza[40];
   if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) {   //Belisce
     if (http.GET() > 0) {
-      String APIData;
-      //DynamicJsonDocument doc(capacity);
-      JsonObject main, weather_0, sys;
-      char wIcon[6];
-      APIData = http.getString();
-      http.end();
-      deserializeJson(doc, APIData);
-      sys = doc["sys"];
-      main = doc["main"];
-      weather_0 = doc["weather"][0];
-      strncpy(opis, weather_0["description"] | strErr, sizeof(opis));
-      strncpy(wIcon, weather_0["icon"] | strErr, sizeof(wIcon));
-      icon = atoi(wIcon);
-      changeLetters(opis);
-      temperature = main["temp"];
-      hum = main["humidity"];
-      pres = main["pressure"];
-      desc = weather_0["description"];
-      windSpeed = doc["wind"]["speed"];
-      windDir = doc["wind"]["deg"];
-      timezone = doc["timezone"];
-      sunrise = sys["sunrise"];
-      sunrise += timezone;
-      sunset = sys["sunset"];
-      sunset += timezone;
-    } else {
-      noInternet = 1;
-      return;
+      deserializeJson(doc, http.getStream());
+      if (doc["cod"] == 200)
+      {
+        strncpy(currentWeather.weatherIcon, doc["weather"][0]["icon"], sizeof(currentWeather.weatherIcon) - 1);
+        changeLetters(strncpy(currentWeather.weatherDesc, doc["weather"][0]["description"], sizeof(currentWeather.weatherDesc) - 1));
+        changeLetters(strncpy(currentWeather.city, doc["name"], sizeof(currentWeather.city) - 1));
+        currentWeather.temp = doc["main"]["temp"];
+        currentWeather.feelsLike = doc["main"]["feels_like"];
+        currentWeather.humidity = doc["main"]["humidity"];
+        currentWeather.pressure = doc["main"]["pressure"];
+        currentWeather.pressureGnd = doc["main"]["grnd_level"];
+        currentWeather.windSpeed = doc["wind"]["speed"];
+        currentWeather.windGust = doc["wind"]["gust"];
+        currentWeather.windDir = doc["wind"]["deg"];
+        currentWeather.visibility = doc["visibility"];
+        currentWeather.clouds = doc["clouds"]["all"];
+        currentWeather.rain = doc["rain"]["1h"];
+        currentWeather.snow = doc["snow"]["1h"];
+        currentWeather.timezone = doc["timezone"];
+        currentWeather.timestamp = doc["dt"];
+        currentWeather.sunrise = doc["sys"]["sunrise"];
+        currentWeather.sunrise += currentWeather.timezone;
+        currentWeather.sunset = doc["sys"]["sunset"];
+        currentWeather.sunset += currentWeather.timezone;
+      }
     }
   }
+  http.end();
 
-
+  // https://api.openweathermap.org/data/2.5/onecall?lat=45.68&lon=18.41&units=metric&lang=hr&exclude=current,minutely,daily&appid=b1d3e9077193732d4b5e3e2c4c036657 Za dnevnu i za upozorenja
   //Uhvati podatke s APIa s Interneta, te ih smjesti u polje struktura (privremeno)
   if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657"))) { //Belisce
     if (http.GET() > 0) {
-      String APIData;
-      APIData = http.getString();
-      http.end();
-      DynamicJsonDocument doc2(capacity2);
-      deserializeJson(doc2, APIData);
-      JsonArray list = doc2["list"];
+      deserializeJson(doc, http.getStream());
+      JsonArray list = doc["list"];
       JsonObject listDate = list[0];
       JsonObject list_main = listDate["main"];
       JsonObject list_weather = listDate["weather"][0];
@@ -548,6 +537,7 @@ void readWeather() {
       noInternet = 1;
       return;
     }
+    http.end();
   }
 }
 
@@ -569,9 +559,9 @@ void refresh() {
   display.setFont(DISPLAY_FONT_SMALL);
   display.setTextSize(2);
   display.setCursor(1, 70);
-  display.print(opis);
+  display.print(currentWeather.weatherDesc);
   display.setCursor(1, 20);
-  display.print(F("Belisce"));
+  display.print(currentWeather.city);
   display.setTextSize(1);
   display.setCursor(1, 46);
   display.print(F("Powered by openweathermaps.org"));
@@ -584,30 +574,30 @@ void refresh() {
   display.setCursor(267, 35);
   display.print(tmp);
 
-  display.drawBitmap(20, 85, weatherIcon(icon), 50, 50, BLACK);
+  display.drawBitmap(20, 85, weatherIcon(atoi(currentWeather.weatherIcon)), 50, 50, BLACK);
   display.setTextSize(2);
   display.setCursor(80, 130);
-  display.print(temperature, 0);
+  display.print(currentWeather.temp, 0);
   display.setCursor(display.getCursorX() + 5, 110);
   display.print('o');
   display.setTextSize(1);
   display.drawBitmap(1, 140, iconTlak, 40, 40, BLACK);
   display.setCursor(45, 170);
-  display.print(pres, DEC);
+  display.print(currentWeather.pressureGnd, DEC);
   display.drawBitmap(145, 140, iconVlaga, 40, 40, BLACK);
   display.setCursor(195, 170);
-  display.print(hum);
+  display.print(currentWeather.humidity);
   display.drawBitmap(1, 190, iconVjetar, 40, 40, BLACK);
   display.setCursor(45, 220);
-  display.print(windSpeed, 1);
+  display.print(currentWeather.windSpeed, 1);
   display.print(" m/s | ");
-  display.print(oznakeVjetar[int((windDir / 22.5) + .5) % 16]);
+  display.print(oznakeVjetar[int((currentWeather.windDir / 22.5) + .5) % 16]);
   display.drawBitmap(1, 240, iconSunrise, 40, 40 , BLACK);
-  sprintf(tmp, "%d:%02d", sunrise / 3600 % 24, sunrise / 60 % 60);
+  sprintf(tmp, "%d:%02d", currentWeather.sunrise / 3600 % 24, currentWeather.sunrise / 60 % 60);
   display.setCursor(40, 270);
   display.print(tmp);
   display.drawBitmap(130, 240, iconSunset, 40, 40 , BLACK);
-  sprintf(tmp, "%d:%02d", sunset / 3600 % 24, sunset / 60 % 60);
+  sprintf(tmp, "%d:%02d", currentWeather.sunset / 3600 % 24, currentWeather.sunset / 60 % 60);
   display.setCursor(175, 270);
   display.print(tmp);
 
