@@ -6,10 +6,8 @@
 // WiFi and Internet includes
 #include <WiFi.h>
 #include <esp_wifi.h>
-#include <HTTPClient.h>
-#include <WiFiClient.h>
 #include <WiFiUdp.h>
-#include <ArduinoJson.h>
+#include "Weather.h"
 
 // Display includes (driver, icons, fonts, etc)
 #include "Inkplate.h"
@@ -36,6 +34,7 @@ Inkplate display(INKPLATE_1BIT);
 TSC2046E_Inkplate ts;
 SPIClass *mySpi = NULL;
 Adafruit_BME280 bme;
+OWMWeather owm;
 
 timeval tm;
 const timeval* tmPtr = &tm;
@@ -47,11 +46,17 @@ const char pass[] = "CaVex250_H2sH11";
 
 const char DOW[7][4] = {"NED", "PON", "UTO", "SRI", "CET", "PET", "SUB"};
 const char* oznakeVjetar[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
-const char* strErr = {"ERR!"};
 
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
 uint8_t selectedDay = 0;
+
+struct sensorData sensor;
+struct currentWeatherHandle currentWeather;
+struct forecastListHandle forecastList;
+struct forecastDisplayHandle forecastDisplay[7];
+// Contains hour, minutes, seconds, ...
+struct tm tNow;
 
 void setup()
 {
@@ -107,7 +112,7 @@ void setup()
   display.partialUpdate();
 
   readSensor(&sensor);
-  readWeather();
+  updateWeatherData();
   if (readNTP(&tm.tv_sec))
   {
     settimeofday(tmPtr, NULL);
@@ -135,21 +140,14 @@ void loop()
     switch (modeSelect)
     {
       case 0:
-        if (tsY > 410 && tsX > 0 && tsX < 800)
+        if (touchArea(tsX, tsY, 0, 410, 800, 190))
         {
           selectedDay = tsX / 160;
           drawDays(selectedDay, true);
           modeSelect = 1;
         }
 
-        if (tsX > 25 && tsX < 75 && tsY > 75 && tsY < 125)
-        {
-          selectedDay = 0;
-          drawDays(selectedDay, true);
-          modeSelect = 1;
-        }
-
-        if (tsY > 0 && tsY < 30 && tsX > 770 && tsX < 800)
+        if (touchArea(tsX, tsY, 770, 0, 30, 30))
         {
           display.setFont(DISPLAY_FONT);
           display.setCursor(610, 35);
@@ -160,51 +158,49 @@ void loop()
         break;
 
       case 1:
-        if (tsY > 500 && tsX > 700 && tsX < 800)
+        if (touchArea(tsX, tsY, 10, 570, 30, 30))
         {
           refresh();
           modeSelect = 0;
           selectedDay = 0;
         }
-        if (tsX > 0 && tsX < 75 && tsY > 0 && tsY < 50 && selectedDay > 0)
+
+        if (touchArea(tsX, tsY, 0, 0, 75, 75) && selectedDay > 0)
         {
           selectedDay--;
           drawDays(selectedDay, false);
           modeSelect = 1;
         }
-        if (tsX > 730 && tsX < 800 && tsY > 0 && tsY < 50 && selectedDay < 4)
+
+        if (touchArea(tsX, tsY, 730, 0, 70, 50) && selectedDay < 4)
         {
           selectedDay++;
           drawDays(selectedDay, false);
           modeSelect = 1;
         }
 
-        if (tsY > 80 && tsY < 180)
+        if (touchArea(tsX, tsY, 0, 80, 800, 100))
         {
           int selectedElement = tsX / 100;
-          int _offset = (timeOffset > 0 && timeOffset < 4) ? 1 : 0;
           int _yPos = 240;
           const int _fontScale = 2;
           const int _fontYSize = 14 * _fontScale;
-          if (selectedElement <= (forecastList.startElement[selectedDay + 2 - forecastList.shiftDay] - forecastList.startElement[selectedDay + 1 - forecastList.shiftDay]))
+          if (selectedElement < (forecastList.startElement[selectedDay + 2 - forecastList.shiftDay] - forecastList.startElement[selectedDay + 1 - forecastList.shiftDay]))
           {
             int element = forecastList.startElement[selectedDay + 1 - forecastList.shiftDay] + selectedElement;
-            Serial.println(element);
             display.fillRect(198, 198, 404, 304, BLACK);
             display.fillRect(200, 200, 400, 300, WHITE);
             display.setFont(DISPLAY_FONT_SMALL);
             display.setTextSize(_fontScale);
             display.setCursor(220, _yPos);  _yPos += _fontYSize;
-            // changeLetters(prognozaDani[selectedDay + _offset].description[selectedElement]);
-            // display.print(prognozaDani[selectedDay + _offset].description[selectedElement]);
             display.print(forecastList.forecast[element].weatherDesc);
             display.setCursor(220, _yPos);  _yPos += _fontYSize;
             display.print("Temp.: ");
-            display.print(prognozaDani[selectedDay + _offset].tempMin[selectedElement], 1);
+            display.print(forecastList.forecast[element].minTemp, 1);
             display.print("[Min] / ");
             display.print(forecastList.forecast[element].temp, 1);
             display.print(" / ");
-            display.print(prognozaDani[selectedDay + _offset].tempMax[selectedElement], 1);
+            display.print(forecastList.forecast[element].maxTemp, 1);
             display.print("[Max] C");
 
             display.setCursor(220, _yPos);  _yPos += _fontYSize;
@@ -215,6 +211,8 @@ void loop()
             display.setCursor(220, _yPos);  _yPos += _fontYSize;
             display.print("Brzina vjetra: ");
             display.print(forecastList.forecast[element].windSpeed, 1);
+            display.print('/');
+            display.print(forecastList.forecast[element].windGust, 1);
             display.print("m/s");
 
             display.setCursor(220, _yPos);  _yPos += _fontYSize;
@@ -272,7 +270,7 @@ void loop()
     if (i < 15)
     {
       readSensor(&sensor);
-      readWeather();
+      updateWeatherData();
       gettimeofday(&tm, NULL);
       tNow = epochToHuman(tm.tv_sec);
       timeToWake = 1200 + tm.tv_sec;
@@ -341,125 +339,12 @@ bool readNTP(time_t *_epoch)
   }
   return false;
 }
-void readWeather()
+
+void updateWeatherData()
 {
-  WiFiClient client;
-  HTTPClient http;
-  DynamicJsonDocument doc(30000);
-
-  http.useHTTP10(true);
-  if (http.begin(client, F("http://api.openweathermap.org/data/2.5/weather?&lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657")))
-  {
-    if (http.GET() > 0)
-    {
-      deserializeJson(doc, http.getStream());
-      if (doc["cod"] == 200)
-      {
-        strncpy(currentWeather.weatherIcon, doc["weather"][0]["icon"], sizeof(currentWeather.weatherIcon) - 1);
-        changeLetters(strncpy(currentWeather.weatherDesc, doc["weather"][0]["description"], sizeof(currentWeather.weatherDesc) - 1));
-        changeLetters(strncpy(currentWeather.city, doc["name"], sizeof(currentWeather.city) - 1));
-        currentWeather.temp = doc["main"]["temp"];
-        currentWeather.feelsLike = doc["main"]["feels_like"];
-        currentWeather.humidity = doc["main"]["humidity"];
-        currentWeather.pressure = doc["main"]["pressure"];
-        currentWeather.pressureGnd = doc["main"]["grnd_level"];
-        currentWeather.windSpeed = doc["wind"]["speed"];
-        currentWeather.windGust = doc["wind"]["gust"];
-        currentWeather.windDir = doc["wind"]["deg"];
-        currentWeather.visibility = doc["visibility"];
-        currentWeather.clouds = doc["clouds"]["all"];
-        currentWeather.rain = doc["rain"]["1h"];
-        currentWeather.snow = doc["snow"]["1h"];
-        currentWeather.timezone = doc["timezone"];
-        currentWeather.timestamp = doc["dt"];
-        currentWeather.sunrise = doc["sys"]["sunrise"];
-        currentWeather.sunrise += currentWeather.timezone;
-        currentWeather.sunset = doc["sys"]["sunset"];
-        currentWeather.sunset += currentWeather.timezone;
-      }
-    }
-  }
-  http.end();
-
+  owm.getCurrentWeather("http://api.openweathermap.org/data/2.5/weather?&lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657", &currentWeather);
+  owm.getForecastWeather("http://api.openweathermap.org/data/2.5/forecast?lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657", &forecastList, forecastDisplay);
   // https://api.openweathermap.org/data/2.5/onecall?lat=45.68&lon=18.41&units=metric&lang=hr&exclude=current,minutely,daily&appid=b1d3e9077193732d4b5e3e2c4c036657 Za dnevnu i za upozorenja
-  
-  if (http.begin(client, F("http://api.openweathermap.org/data/2.5/forecast?lat=45.68&lon=18.41&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657")))
-  {
-    if (http.GET() > 0)
-    {
-      doc.clear();
-      doc.garbageCollect();
-      deserializeJson(doc, http.getStream());
-      if (atoi(doc["cod"]) == 200)
-      {
-        forecastList.numberOfData = doc["cnt"];
-        for (int i = 0; i < forecastList.numberOfData; i++)
-        {
-          changeLetters(strncpy(forecastList.forecast[i].weatherDesc, doc["list"][i]["weather"][0]["description"], sizeof(forecastList.forecast[i].weatherDesc) - 1));
-          strncpy(forecastList.forecast[i].weatherIcon, doc["list"][i]["weather"][0]["icon"], sizeof(forecastList.forecast[i].weatherIcon) - 1);
-          forecastList.forecast[i].clouds = doc["list"][i]["clouds"]["all"];
-          forecastList.forecast[i].humidity = doc["list"][i]["main"]["humidity"];
-          forecastList.forecast[i].probability = (float)(doc["list"][i]["pop"]) * 100;
-          forecastList.forecast[i].weatherId = doc["list"][i]["weather"][0]["id"];
-          forecastList.forecast[i].pressureGnd = doc["list"][i]["main"]["grnd_level"];
-          forecastList.forecast[i].visibility = doc["list"][i]["visibility"];
-          forecastList.forecast[i].pressure = doc["list"][i]["main"]["pressure"];
-          forecastList.forecast[i].windDir = doc["list"][i]["wind"]["deg"];
-          forecastList.forecast[i].temp = doc["list"][i]["main"]["temp"];
-          forecastList.forecast[i].feelsLike = doc["list"][i]["main"]["feels_like"];
-          forecastList.forecast[i].windSpeed = doc["list"][i]["wind"]["speed"];
-          forecastList.forecast[i].windGust = doc["list"][i]["wind"]["gust"];
-          forecastList.forecast[i].rain = doc["list"][i]["rain"]["3h"];
-          forecastList.forecast[i].snow = doc["list"][i]["snow"]["3h"];
-          forecastList.forecast[i].timestamp = doc["list"][i]["dt"];
-        }
-
-        // Group data into "days"
-        // Skip first element
-        int n = 1;
-        forecastList.startElement[0] = 0;
-        for (int i = 1; i < forecastList.numberOfData; i++)
-        {
-          if (epochToHuman(forecastList.forecast[i].timestamp).tm_hour == 0)
-          {
-            forecastList.startElement[n] = i;
-            n++;
-          }
-        }
-        forecastList.startElement[n] = forecastList.numberOfData;
-
-        // Calculate avg and max data for forecast display
-        memset(forecastDisplay, 0, sizeof(forecastDisplay));
-        for (int i = 0; i < 6; i++)
-        {
-          int nElements = forecastList.startElement[i + 1] - forecastList.startElement[i] + 1;
-          forecastDisplay[i].maxTemp = forecastList.forecast[forecastList.startElement[i]].temp;
-          forecastDisplay[i].minTemp = forecastList.forecast[forecastList.startElement[i]].temp;
-          forecastDisplay[i].maxWindSpeed = forecastList.forecast[forecastList.startElement[i]].windGust;
-          for (int j = forecastList.startElement[i]; j < forecastList.startElement[i + 1]; j++)
-          {
-            forecastDisplay[i].avgPressure += forecastList.forecast[j].pressureGnd;
-            forecastDisplay[i].avgHumidity += forecastList.forecast[j].humidity;
-            forecastDisplay[i].avgWindSpeed += forecastList.forecast[j].windSpeed;
-            if (forecastDisplay[i].maxTemp < forecastList.forecast[j].temp) forecastDisplay[i].maxTemp = forecastList.forecast[j].temp;
-            if (forecastDisplay[i].minTemp > forecastList.forecast[j].temp) forecastDisplay[i].minTemp = forecastList.forecast[j].temp;
-            if (forecastDisplay[i].maxWindSpeed < forecastList.forecast[j].windGust) forecastDisplay[i].maxWindSpeed = forecastList.forecast[j].windGust;
-            if (epochToHuman(forecastList.forecast[j].timestamp).tm_hour == 15)
-            {
-              forecastDisplay[i].weatherIcon = forecastList.forecast[j].weatherIcon;
-              forecastDisplay[i].weatherDesc = forecastList.forecast[j].weatherDesc;
-            }
-          }
-          forecastDisplay[i].avgPressure /= nElements;
-          forecastDisplay[i].avgHumidity /= nElements;
-          forecastDisplay[i].avgWindSpeed /= nElements;
-        }
-        forecastList.shiftDay = 1;
-        if (forecastList.startElement[1] - forecastList.startElement[0] < 3) forecastList.shiftDay = 0;
-      }
-    }
-    http.end();
-  }
 }
 
 void changeLetters(char *p)
@@ -487,8 +372,6 @@ void refresh()
   display.setCursor(1, 20);
   display.print(currentWeather.city);
   display.setTextSize(1);
-  display.setCursor(1, 46);
-  display.print(F("Powered by openweathermaps.org"));
   display.drawBitmap(770, 0, refIcon, 30, 30, BLACK);
 
   sprintf(tmp, "%1d:%02d %d/%d/%04d %3s", tNow.tm_hour, tNow.tm_min, tNow.tm_mday, tNow.tm_mon + 1, tNow.tm_year + 1900, DOW[tNow.tm_wday]);
@@ -501,7 +384,7 @@ void refresh()
   display.drawBitmap(20, 85, weatherIcon(atoi(currentWeather.weatherIcon)), 50, 50, BLACK);
   display.setTextSize(2);
   display.setCursor(80, 130);
-  display.print(currentWeather.temp, 0);
+  display.print(round(currentWeather.temp), 0);
   display.setCursor(display.getCursorX() + 5, 110);
   display.print('o');
   display.setTextSize(1);
@@ -652,7 +535,7 @@ void drawDays(uint8_t n, bool fullUpdate)
   // drawGraph(480, 420, dayHours, prognozaDani[n].windSpeed, "h", "m/s", 250, 130, prognozaDani[n].nData, 1, 7);
   if (n > 0) display.fillTriangle(50, 10, 50, 40, 20, 25, BLACK);
   if (n < 4) display.fillTriangle(750, 10, 750, 40, 780, 25, BLACK);
-  display.fillTriangle(770, 570, 790, 570, 780, 580, BLACK);
+  display.fillTriangle(10, 580, 30, 570, 30, 590, BLACK);
 
   display.setFont(DISPLAY_FONT);
   display.fillRect(4, 50, 796, 3, BLACK);
@@ -673,6 +556,12 @@ void drawDays(uint8_t n, bool fullUpdate)
   }
 }
 
+uint8_t touchArea(int16_t tsX, int16_t tsY, int16_t x, int16_t y, int16_t w, int16_t h)
+{
+  if ((tsX >= x) && (tsY >= y) && (tsX < (x + w)) && (tsY < (y + h))) return 1;
+  return 0;
+}
+
 void drawGraph(int x, int y, char *dx, float *dy, char *tx, char *ty, int sizex, int sizey, char n, char decimal, char yelements)
 {
   char digits = 0;
@@ -681,7 +570,8 @@ void drawGraph(int x, int y, char *dx, float *dy, char *tx, char *ty, int sizex,
   int stepX;
   float stepY;
   int stepYGraph;
-  for (int i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++)
+  {
     if (maxValueY < dy[i]) maxValueY = dy[i];
     if (minValueY > dy[i]) minValueY = dy[i];
   }
