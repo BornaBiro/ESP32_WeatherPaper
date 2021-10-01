@@ -63,6 +63,7 @@ void setup()
   Serial.begin(115200);
   Wire.begin();
   display.begin();
+  gui.init(&display);
 
   mySpi = display.getSPIptr();
   mySpi->begin(14, 12, 13, 15);
@@ -120,7 +121,7 @@ void setup()
   }
   gettimeofday(&tm, NULL);
   timeToWake = 1200 + tm.tv_sec;
-  gui.drawMainScreen(&display, &sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
+  gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
   esp_wifi_stop();
   btStop();
 }
@@ -160,7 +161,7 @@ void loop()
       case 1:
         if (touchArea(tsX, tsY, 10, 570, 30, 30))
         {
-          gui.drawMainScreen(&display, &sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
+          gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
           modeSelect = 0;
           selectedDay = 0;
         }
@@ -275,7 +276,7 @@ void loop()
       gettimeofday(&tm, NULL);
       tNow = epochToHuman(tm.tv_sec);
       timeToWake = 1200 + tm.tv_sec;
-      gui.drawMainScreen(&display, &sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
+      gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
     }
     esp_wifi_stop();
     btStop();
@@ -394,9 +395,9 @@ void drawDays(uint8_t n, bool fullUpdate)
   display.print(epochToHuman(forecastList.forecast[start].timestamp).tm_mon + 1, DEC);
   display.print(".,");
   display.print(DOW[epochToHuman(forecastList.forecast[start].timestamp).tm_wday]);
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 10; i++)
   {
-    const uint8_t *iconList[] = {iconTemp, iconTlak, iconVlaga, iconVjetar};
+    const uint8_t *iconList[] = {iconTemp, iconTlak, iconVlaga, iconVjetar, iconWindDir, iconClouds, iconVisability, iconRainDrop, iconSnowflake, iconProbability};
     display.drawBitmap((i * 70) + 50, 550, iconList[i], 40, 40, BLACK);
   }
    if (fullUpdate)

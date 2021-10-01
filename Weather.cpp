@@ -147,8 +147,8 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
           _d[i].avgHumidity /= nElements;
           eastWestVectSum /= nElements;
           northSouthVectSum /= nElements;
-          _d[i].avgWindSpeed = sqrt(eastWestVectSum * eastWestVectSum + northSouthVectSum * northSouthVectSum);
-          _d[i].avgWindDir = atan(eastWestVectSum / northSouthVectSum) * 180 / PI;
+          _d[i].avgWindSpeed = sqrt((eastWestVectSum * eastWestVectSum) + (northSouthVectSum * northSouthVectSum));
+          _d[i].avgWindDir = atan2(eastWestVectSum, northSouthVectSum) * 180 / PI;
           _d[i].avgWindDir = (_d[i].avgWindDir >= 0?_d[i].avgWindDir:_d[i].avgWindDir + 360);
           Serial.println(_d[i].avgWindDir);
           //_d[i].avgWindSpeed /= nElements;

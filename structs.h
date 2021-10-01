@@ -74,8 +74,8 @@ struct forecastListHandle
 // Struct for forcast display
 struct forecastDisplayHandle
 {
-  uint8_t maxTemp;
-  uint8_t minTemp;
+  int8_t maxTemp;
+  int8_t minTemp;
   uint16_t avgHumidity;
   uint16_t avgPressure;
   float avgWindSpeed;

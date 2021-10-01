@@ -5,7 +5,12 @@ GUI::GUI()
     // Empty constructor
 }
 
-void GUI::drawMainScreen(Inkplate *_ink, struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct tm *_time)
+void GUI::init(Inkplate *_inkPtr)
+{
+  _ink = _inkPtr;
+}
+
+void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct tm *_time)
 {
     char tmp[50];
     _ink->clearDisplay();
@@ -69,40 +74,22 @@ void GUI::drawMainScreen(Inkplate *_ink, struct sensorData *_sensor, struct curr
     for (int i = 1; i < 6; i++) 
     {
         xOffset = i * 160;
-        xOffsetText = ((i - 1) * 160) + 20;
+        xOffsetText = ((i - 1) * 160) + 10;
         _ink->fillRect(xOffset, 410, 3, 180, BLACK);
         _ink->drawBitmap(xOffset - 105, 420, weatherIcon(atoi(_displayForecast[i - _forecastList->shiftDay].weatherIcon)), 50, 50, BLACK);
         _ink->setTextSize(1);
         _ink->setFont(DISPLAY_FONT_SMALL);
-        _ink->setCursor(xOffsetText + 10, 482);
-        _ink->print(_displayForecast[i - _forecastList->shiftDay].weatherDesc);
-        _ink->setCursor(xOffsetText + 40, 415);
-        _ink->print(epochToHuman(_forecastList->forecast[_forecastList->startElement[i - _forecastList->shiftDay]].timestamp).tm_mday);
-        _ink->print('.');
-        _ink->print(epochToHuman(_forecastList->forecast[_forecastList->startElement[i -_forecastList->shiftDay]].timestamp).tm_mon + 1);
-        _ink->setCursor(xOffsetText - 10, 575);
-        _ink->print(_displayForecast[i - _forecastList->shiftDay].avgPressure);
-        _ink->print("hPa  ");
-        _ink->print(_displayForecast[i - _forecastList->shiftDay].avgHumidity);
-        _ink->print('%');
-        _ink->setCursor(xOffsetText - 10, 588);
-        _ink->print(_displayForecast[i - _forecastList->shiftDay].avgWindSpeed, 1);
-        _ink->print("m/s ");
-        _ink->print(oznakeVjetar[int((_displayForecast[i - _forecastList->shiftDay].avgWindDir / 22.5) + .5) % 16]);
-        _ink->print(' ');
-        _ink->print(_displayForecast[i - _forecastList->shiftDay].maxWindSpeed, 1);
-        _ink->print("m/s");
+        printStringCenter(_displayForecast[i - _forecastList->shiftDay].weatherDesc, xOffset - 80, 482);
+        sprintf(tmp, "%d.%d", epochToHuman(_forecastList->forecast[_forecastList->startElement[i - _forecastList->shiftDay]].timestamp).tm_mday, epochToHuman(_forecastList->forecast[_forecastList->startElement[i -_forecastList->shiftDay]].timestamp).tm_mon + 1);
+        printStringCenter(tmp, xOffset - 80, 415);
+        sprintf(tmp, "%d hPa   %d %%", _displayForecast[i - _forecastList->shiftDay].avgPressure, _displayForecast[i - _forecastList->shiftDay].avgHumidity);
+        printStringCenter(tmp, xOffset - 80, 575);
+        sprintf(tmp, "%.1f / %.1f m/s   %s", _displayForecast[i - _forecastList->shiftDay].avgWindSpeed, _displayForecast[i - _forecastList->shiftDay].maxWindSpeed, oznakeVjetar[int((_displayForecast[i - _forecastList->shiftDay].avgWindDir / 22.5) + .5) % 16]);
+        printStringCenter(tmp, xOffset - 80, 588);
         _ink->setFont(DISPLAY_FONT);
-        _ink->setCursor(xOffsetText, 520);
-        _ink->print(_displayForecast[i - _forecastList->shiftDay].maxTemp);
-        _ink->setCursor(_ink->getCursorX() + 5, 510);
-        _ink->print("o");
-        _ink->setCursor(xOffsetText, 555);
-        _ink->print(_displayForecast[i - _forecastList->shiftDay].minTemp);
-        _ink->setCursor(_ink->getCursorX() + 5, 545);
-        _ink->print('o');
-        _ink->setCursor(xOffsetText + 20, 400);
-        _ink->print(DOW[epochToHuman(_forecastList->forecast[_forecastList->startElement[i - _forecastList->shiftDay]].timestamp).tm_wday]);
+        sprintf(tmp, "%d | %d", _displayForecast[i - _forecastList->shiftDay].maxTemp, _displayForecast[i - _forecastList->shiftDay].minTemp);
+        printStringCenter(tmp, xOffset - 80, 520);
+        printStringCenter((char*)DOW[epochToHuman(_forecastList->forecast[_forecastList->startElement[i - _forecastList->shiftDay]].timestamp).tm_wday], xOffset - 80, 400);
     }
 
     for (int i = 1; i < 3; i++)
@@ -112,9 +99,18 @@ void GUI::drawMainScreen(Inkplate *_ink, struct sensorData *_sensor, struct curr
     _ink->display();
 }
 
-void GUI::drawSelectedDay(Inkplate *_ink, struct forecastListHandle *_forecastList)
+void GUI::drawSelectedDay(struct forecastListHandle *_forecastList)
 {
 
+}
+
+void GUI::printStringCenter(char *buf, int x, int y)
+{
+    int16_t x1, y1;
+    uint16_t w, h;
+    _ink->getTextBounds(buf, x, y, &x1, &y1, &w, &h); //calc width of new string
+    _ink->setCursor(x - w / 2, y);
+    _ink->print(buf);
 }
 
 uint8_t* GUI::weatherIcon(uint8_t i)

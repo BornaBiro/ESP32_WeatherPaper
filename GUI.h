@@ -18,10 +18,14 @@ class GUI
 {
     public:
     GUI();
-
-    void drawMainScreen(Inkplate *_ink, struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct tm *_time);
-    void drawSelectedDay(Inkplate *_ink, struct forecastListHandle *_forecastList);
+    void init(Inkplate *_inkPtr);
+    void drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct tm *_time);
+    void drawSelectedDay(struct forecastListHandle *_forecastList);
+    void printStringCenter(char *buf, int x, int y);
     uint8_t* weatherIcon(uint8_t i);
+
+    private:
+    Inkplate *_ink;
 };
 
 #endif
