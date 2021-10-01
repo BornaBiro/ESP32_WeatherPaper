@@ -9,7 +9,7 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(30000);
+  DynamicJsonDocument doc(25000);
   http.useHTTP10(true);
 
   if (http.begin(client, _url))
@@ -52,8 +52,6 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
     return 0;
   }
   http.end();
-  doc.clear();
-  doc.garbageCollect();
   return 1;
 }
 
@@ -61,7 +59,7 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(30000);
+  DynamicJsonDocument doc(24576);
   http.useHTTP10(true);
 
   if (http.begin(client, _url))
@@ -113,15 +111,24 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
         memset(_d, 0, sizeof(forecastDisplayHandle) * 7);
         for (int i = 0; i < 6; i++)
         {
-          int nElements = _f->startElement[i + 1] - _f->startElement[i] + 1;
+          int nElements = _f->startElement[i + 1] - _f->startElement[i];
           _d[i].maxTemp = _f->forecast[_f->startElement[i]].maxTemp;
           _d[i].minTemp = _f->forecast[_f->startElement[i]].minTemp;
           _d[i].maxWindSpeed = _f->forecast[_f->startElement[i]].windGust;
+          //Serial.print("Start element:");
+          //Serial.print(_f->startElement[i], DEC);
+          //Serial.print(" end element:");
+          //Serial.println(_f->startElement[i + 1], DEC);
+          int something = 0;
+          float eastWestVectSum = 0;
+          float northSouthVectSum = 0;
           for (int j = _f->startElement[i]; j < _f->startElement[i + 1]; j++)
           {
             _d[i].avgPressure += _f->forecast[j].pressureGnd;
             _d[i].avgHumidity += _f->forecast[j].humidity;
-            _d[i].avgWindSpeed += _f->forecast[j].windSpeed;
+            //_d[i].avgWindSpeed += _f->forecast[j].windSpeed;
+            eastWestVectSum += _f->forecast[j].windSpeed * sin(_f->forecast[j].windDir * PI / 180);
+            northSouthVectSum += _f->forecast[j].windSpeed * cos(_f->forecast[j].windDir * PI / 180);
             if (_d[i].maxTemp < _f->forecast[j].maxTemp) _d[i].maxTemp = round(_f->forecast[j].maxTemp);
             if (_d[i].minTemp > _f->forecast[j].minTemp) _d[i].minTemp = round(_f->forecast[j].minTemp);
             if (_d[i].maxWindSpeed < _f->forecast[j].windGust) _d[i].maxWindSpeed = _f->forecast[j].windGust;
@@ -130,18 +137,27 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
               _d[i].weatherIcon = _f->forecast[j].weatherIcon;
               _d[i].weatherDesc = _f->forecast[j].weatherDesc;
             }
+            //Serial.print(i, DEC);
+            //Serial.print('/');
+            //Serial.println(j, DEC);
+            something++;
           }
+          Serial.println(something, DEC);
           _d[i].avgPressure /= nElements;
           _d[i].avgHumidity /= nElements;
-          _d[i].avgWindSpeed /= nElements;
+          eastWestVectSum /= nElements;
+          northSouthVectSum /= nElements;
+          _d[i].avgWindSpeed = sqrt(eastWestVectSum * eastWestVectSum + northSouthVectSum * northSouthVectSum);
+          _d[i].avgWindDir = atan(eastWestVectSum / northSouthVectSum) * 180 / PI;
+          _d[i].avgWindDir = (_d[i].avgWindDir >= 0?_d[i].avgWindDir:_d[i].avgWindDir + 360);
+          Serial.println(_d[i].avgWindDir);
+          //_d[i].avgWindSpeed /= nElements;
         }
         _f->shiftDay = 1;
         if (_f->startElement[1] - _f->startElement[0] < 3) _f->shiftDay = 0;
       }
     }
     http.end();
-    doc.clear();
-    doc.garbageCollect();
   }
 }
 
@@ -155,13 +171,4 @@ void OWMWeather::removeCroLetters(char *p)
     if (p[i] == 161) p[i] = 's';
     if (p[i] == 190) p[i] = 'z';
   }
-}
-
-struct tm OWMWeather::epochToHuman(time_t _t)
-{
-  struct tm *_timePtr;
-  struct tm _time;
-  _timePtr = localtime(&_t);
-  memcpy(&_time, _timePtr, sizeof(_time));
-  return _time;
 }

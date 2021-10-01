@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "driver/rtc_io.h"
+#include "timeAndDate.h"
 
 // WiFi and Internet includes
 #include <WiFi.h>
@@ -11,6 +12,7 @@
 
 // Display includes (driver, icons, fonts, etc)
 #include "Inkplate.h"
+#include "GUI.h"
 #include "Neucha_Regular17pt7b.h"
 #include "RobotoCondensed_Regular6pt7b.h"
 #include "icons.h"
@@ -35,7 +37,10 @@ TSC2046E_Inkplate ts;
 SPIClass *mySpi = NULL;
 Adafruit_BME280 bme;
 OWMWeather owm;
+GUI gui;
 
+// Contains hour, minutes, seconds, ...
+struct tm tNow;
 timeval tm;
 const timeval* tmPtr = &tm;
 uint64_t timeToWake;
@@ -43,9 +48,6 @@ int timeOffset;
 
 const char ssid[] = "Biro_WLAN";
 const char pass[] = "CaVex250_H2sH11";
-
-const char DOW[7][4] = {"NED", "PON", "UTO", "SRI", "CET", "PET", "SUB"};
-const char* oznakeVjetar[] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
 
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
@@ -55,14 +57,12 @@ struct sensorData sensor;
 struct currentWeatherHandle currentWeather;
 struct forecastListHandle forecastList;
 struct forecastDisplayHandle forecastDisplay[7];
-// Contains hour, minutes, seconds, ...
-struct tm tNow;
 
 void setup()
 {
-  display.begin();
-  Wire.begin();
   Serial.begin(115200);
+  Wire.begin();
+  display.begin();
 
   mySpi = display.getSPIptr();
   mySpi->begin(14, 12, 13, 15);
@@ -74,10 +74,10 @@ void setup()
   WiFi.setHostname("WeatherPaper");
   bme.begin(0x76);
   bme.setSampling(Adafruit_BME280::MODE_FORCED,
-                  Adafruit_BME280::SAMPLING_X1, // temperature
-                  Adafruit_BME280::SAMPLING_X1, // pressure
-                  Adafruit_BME280::SAMPLING_X1, // humidity
-                  Adafruit_BME280::FILTER_OFF   );
+                  Adafruit_BME280::SAMPLING_X16, // temperature
+                  Adafruit_BME280::SAMPLING_X16, // pressure
+                  Adafruit_BME280::SAMPLING_X16, // humidity
+                  Adafruit_BME280::FILTER_X16   );
   display.setTextWrap(false);
   display.setFont(DISPLAY_FONT);
   display.setTextColor(BLACK, WHITE);
@@ -120,7 +120,7 @@ void setup()
   }
   gettimeofday(&tm, NULL);
   timeToWake = 1200 + tm.tv_sec;
-  refresh();
+  gui.drawMainScreen(&display, &sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
   esp_wifi_stop();
   btStop();
 }
@@ -160,7 +160,7 @@ void loop()
       case 1:
         if (touchArea(tsX, tsY, 10, 570, 30, 30))
         {
-          refresh();
+          gui.drawMainScreen(&display, &sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
           modeSelect = 0;
           selectedDay = 0;
         }
@@ -237,6 +237,7 @@ void loop()
             display.print(forecastList.forecast[element].rain, 1);
             display.print("mm");
           }
+
           display.setTextSize(1);
           display.partialUpdate();
         }
@@ -274,7 +275,7 @@ void loop()
       gettimeofday(&tm, NULL);
       tNow = epochToHuman(tm.tv_sec);
       timeToWake = 1200 + tm.tv_sec;
-      refresh();
+      gui.drawMainScreen(&display, &sensor, &currentWeather, &forecastList, forecastDisplay, &tNow);
     }
     esp_wifi_stop();
     btStop();
@@ -359,159 +360,6 @@ void changeLetters(char *p)
   }
 }
 
-void refresh()
-{
-  char tmp[50];
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.fillRect(20, 360, 760, 3, BLACK);
-  display.setFont(DISPLAY_FONT_SMALL);
-  display.setTextSize(2);
-  display.setCursor(1, 70);
-  display.print(currentWeather.weatherDesc);
-  display.setCursor(1, 20);
-  display.print(currentWeather.city);
-  display.setTextSize(1);
-  display.drawBitmap(770, 0, refIcon, 30, 30, BLACK);
-
-  sprintf(tmp, "%1d:%02d %d/%d/%04d %3s", tNow.tm_hour, tNow.tm_min, tNow.tm_mday, tNow.tm_mon + 1, tNow.tm_year + 1900, DOW[tNow.tm_wday]);
-
-  display.setFont(DISPLAY_FONT);
-  display.fillRect(4, 50, 796, 3, BLACK);
-  display.setCursor(267, 35);
-  display.print(tmp);
-
-  display.drawBitmap(20, 85, weatherIcon(atoi(currentWeather.weatherIcon)), 50, 50, BLACK);
-  display.setTextSize(2);
-  display.setCursor(80, 130);
-  display.print(round(currentWeather.temp), 0);
-  display.setCursor(display.getCursorX() + 5, 110);
-  display.print('o');
-  display.setTextSize(1);
-  display.drawBitmap(1, 140, iconTlak, 40, 40, BLACK);
-  display.setCursor(45, 170);
-  display.print(currentWeather.pressureGnd, DEC);
-  display.drawBitmap(145, 140, iconVlaga, 40, 40, BLACK);
-  display.setCursor(195, 170);
-  display.print(currentWeather.humidity);
-  display.drawBitmap(1, 190, iconVjetar, 40, 40, BLACK);
-  display.setCursor(45, 220);
-  display.print(currentWeather.windSpeed, 1);
-  display.print(" m/s | ");
-  display.print(oznakeVjetar[int((currentWeather.windDir / 22.5) + .5) % 16]);
-  display.drawBitmap(1, 240, iconSunrise, 40, 40 , BLACK);
-  sprintf(tmp, "%d:%02d", epochToHuman(currentWeather.sunrise).tm_hour, epochToHuman(currentWeather.sunrise).tm_min);
-  display.setCursor(40, 270);
-  display.print(tmp);
-  display.drawBitmap(130, 240, iconSunset, 40, 40 , BLACK);
-  sprintf(tmp, "%d:%02d", epochToHuman(currentWeather.sunset).tm_hour, epochToHuman(currentWeather.sunset).tm_min);
-  display.setCursor(175, 270);
-  display.print(tmp);
-
-  display.drawBitmap(300, 70, indoorIcon, 40, 40, BLACK);
-  display.drawBitmap(300, 140, iconTlak, 40, 40, BLACK);
-  display.setCursor(350, 170);
-  display.print(sensor.pressure, 1);
-  display.drawBitmap(300, 190, iconVlaga, 40, 40, BLACK);
-  display.setCursor(350, 220);
-  display.print(sensor.humidity, 1);
-  display.drawBitmap(300, 240, iconTemp, 40, 40, BLACK);
-  display.setCursor(350, 270);
-  display.print(sensor.temp, 1);
-
-  int xOffset, xOffsetText;
-  for (int i = 1; i < 6; i++) 
-  {
-    xOffset = i * 160;
-    xOffsetText = ((i - 1) * 160) + 20;
-    display.fillRect(xOffset, 410, 3, 180, BLACK);
-    display.drawBitmap(xOffset - 105, 420, weatherIcon(atoi(forecastDisplay[i - forecastList.shiftDay].weatherIcon)), 50, 50, BLACK);
-    display.setTextSize(1);
-    display.setFont(DISPLAY_FONT_SMALL);
-    display.setCursor(xOffsetText + 10, 482);
-    display.print(forecastDisplay[i - forecastList.shiftDay].weatherDesc);
-    display.setCursor(xOffsetText + 40, 415);
-    display.print(epochToHuman(forecastList.forecast[forecastList.startElement[i - forecastList.shiftDay]].timestamp).tm_mday);
-    display.print('.');
-    display.print(epochToHuman(forecastList.forecast[forecastList.startElement[i - forecastList.shiftDay]].timestamp).tm_mon + 1);
-    display.setCursor(xOffsetText - 10, 575);
-    display.print(forecastDisplay[i - forecastList.shiftDay].avgPressure);
-    display.print("hPa  ");
-    display.print(forecastDisplay[i - forecastList.shiftDay].avgHumidity);
-    display.print('%');
-    display.setCursor(xOffsetText - 10, 588);
-    display.print(forecastDisplay[i - forecastList.shiftDay].avgWindSpeed, 1);
-    display.print("m/s ");
-    // display.print(oznakeVjetar[int((dani[i - 1 + k].windDir / 22.5) + .5) % 16]);
-    display.print(' ');
-    display.print(forecastDisplay[i - forecastList.shiftDay].maxWindSpeed, 1);
-    display.print("m/s");
-    display.setFont(DISPLAY_FONT);
-    display.setCursor(xOffsetText, 520);
-    display.print(forecastDisplay[i - forecastList.shiftDay].maxTemp);
-    display.setCursor(display.getCursorX() + 5, 510);
-    display.print("o");
-    display.setCursor(xOffsetText, 555);
-    display.print(forecastDisplay[i - forecastList.shiftDay].minTemp);
-    display.setCursor(display.getCursorX() + 5, 545);
-    display.print('o');
-    display.setCursor(xOffsetText + 20, 400);
-    display.print(DOW[epochToHuman(forecastList.forecast[forecastList.startElement[i - forecastList.shiftDay]].timestamp).tm_wday]);
-  }
-
-  for (int i = 1; i < 3; i++)
-  {
-    display.fillRect(267 * i, 60, 3, 290, BLACK);
-  }
-
-  display.display();
-}
-
-uint8_t* weatherIcon(uint8_t i)
-{
-  switch (i)
-  {
-    case 1:
-      return (uint8_t*)icon01d;
-      break;
-    case 2:
-      return (uint8_t*)icon02d;
-      break;
-    case 3:
-      return (uint8_t*)icon03d;
-      break;
-    case 4:
-      return (uint8_t*)icon04d;
-      break;
-    case 9:
-      return (uint8_t*)icon09d;
-      break;
-    case 10:
-      return (uint8_t*)icon10d;
-      break;
-    case 11:
-      return (uint8_t*)icon11d;
-      break;
-    case 13:
-      return (uint8_t*)icon13d;
-      break;
-    case 50:
-      return (uint8_t*)icon13d;
-      break;
-    default:
-      return (uint8_t*)icon01d;
-  }
-}
-
-struct tm epochToHuman(time_t _t)
-{
-  struct tm *_timePtr;
-  struct tm _time;
-  _timePtr = localtime(&_t);
-  memcpy(&_time, _timePtr, sizeof(_time));
-  return _time;
-}
-
 void drawDays(uint8_t n, bool fullUpdate)
 {
   display.clearDisplay();
@@ -522,7 +370,7 @@ void drawDays(uint8_t n, bool fullUpdate)
   uint8_t end = forecastList.startElement[-forecastList.shiftDay + n + 2];
   for (int i = start; i < end; i++)
   {
-    display.drawBitmap(xPos * 95 + 45, 100, weatherIcon(atoi(forecastList.forecast[i].weatherIcon)), 50, 50, BLACK);
+    display.drawBitmap(xPos * 95 + 45, 100, gui.weatherIcon(atoi(forecastList.forecast[i].weatherIcon)), 50, 50, BLACK);
     display.setCursor(xPos * 95 + 30, 170);
     display.print(epochToHuman(forecastList.forecast[i].timestamp).tm_hour, DEC);
     display.print(":00h");
@@ -546,6 +394,11 @@ void drawDays(uint8_t n, bool fullUpdate)
   display.print(epochToHuman(forecastList.forecast[start].timestamp).tm_mon + 1, DEC);
   display.print(".,");
   display.print(DOW[epochToHuman(forecastList.forecast[start].timestamp).tm_wday]);
+  for (int i = 0; i < 4; i++)
+  {
+    const uint8_t *iconList[] = {iconTemp, iconTlak, iconVlaga, iconVjetar};
+    display.drawBitmap((i * 70) + 50, 550, iconList[i], 40, 40, BLACK);
+  }
    if (fullUpdate)
    {
      display.display();

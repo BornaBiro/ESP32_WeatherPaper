@@ -5,7 +5,7 @@
 #include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
-#include "time.h"
+#include "timeAndDate.h"
 
 class OWMWeather
 {
@@ -14,7 +14,6 @@ class OWMWeather
     uint8_t getCurrentWeather(const char* _url, struct currentWeatherHandle *_c);
     uint8_t getForecastWeather(const char* _url, struct forecastListHandle *_f, struct forecastDisplayHandle *_d);
     void removeCroLetters(char *p);
-    struct tm epochToHuman(time_t _t);
 };
 
 #endif
