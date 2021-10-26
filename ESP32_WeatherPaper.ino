@@ -27,6 +27,8 @@
 #include "structs.h"
 #include "EEPROM.h"
 #include "PCF85063.h"
+#include "communication.h"
+#include "RF24_Inkplate.h"
 
 //.ttf to .h: https://rop.nl/truetype2gfx/
 //Open Source fonts https://fonts.google.com/
@@ -43,6 +45,8 @@ Adafruit_BME280 bme;
 OWMWeather owm;
 GUI gui;
 pcf85063 rtc;
+communication rf;
+RF24_Inkplate radio(14, 15, 2000000);
 
 // Contains hour, minutes, seconds, ...
 struct tm tNow;
@@ -65,23 +69,13 @@ struct currentWeatherHandle currentWeather;
 struct forecastListHandle forecastList;
 struct forecastDisplayHandle forecastDisplay[7];
 struct oneCallApiHandle oneCallApi;
+struct syncStructHandle syncStruct;
 
 void setup()
 {
   Serial.begin(115200);
   Wire.begin();
   display.begin();
-  gui.init(&display);
-  rtc.RTCinit();
-
-  mySpi = display.getSPIptr();
-  mySpi->begin(14, 12, 13, 15);
-  #ifdef NEW_INKPLATE
-  ts.begin(mySpi, &display, 10, 13);
-  #elif
-  ts.begin(mySpi, &display, 13, 14);
-  #endif
-  ts.calibrate(800, 3420, 3553, 317, 0, 799, 0, 599);
 
   #ifdef NEW_INKPLATE
   // Set output mode of MCP INT pin
@@ -90,6 +84,10 @@ void setup()
   // Set touchscreen controller INT pin
   display.pinModeInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 13, INPUT_PULLUP);
   display.setIntPinInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 13, FALLING);
+
+  // Set default pin state on touchscreen controller CS pin
+  display.pinModeInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 10, OUTPUT);
+  display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 10, HIGH);
 
   // Set default state of nRF24l01 pins
   display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 14, HIGH);
@@ -102,6 +100,25 @@ void setup()
   // Clear all INT flags on MCP
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
   #endif
+
+  gui.init(&display);
+  rf.init(&radio, &display, &rtc);
+  rtc.RTCinit();
+
+  mySpi = display.getSPIptr();
+  mySpi->begin(14, 12, 13, 15);
+  #ifdef NEW_INKPLATE
+  ts.begin(mySpi, &display, 10, 13);
+  #elif
+  ts.begin(mySpi, &display, 13, 14);
+  #endif
+  ts.calibrate(800, 3420, 3553, 317, 0, 799, 0, 599);
+
+  if (!radio.begin(mySpi, &display))
+  {
+    Serial.println("Radio init ERROR!");
+    while (1);
+  }
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -154,6 +171,14 @@ void setup()
     //gettimeofday(&tm, NULL);
   }
   tNow = epochToHuman(rtc.getClock());
+
+  rf.setupCommunication();
+  if (rf.sync(&syncStruct))
+  {
+    display.clearDisplay();
+    display.print("sync succ!");
+    display.display();
+  }
 
   timeToWake = 1200 + myTime;
   gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &tNow);

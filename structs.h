@@ -3,6 +3,10 @@
 
 #include "stdint.h"
 
+#define SYNC_HEADER     0b00110101
+#define DATA1_HEADER    0b00010001
+#define DATA2_HEADER    0b00100010
+
 // Struct used for stroring data from sensor (indoor unit)
 struct sensorData {
   float temp = 0;
@@ -90,6 +94,37 @@ struct oneCallApiHandle
   char alertEvent[50];
   uint32_t alertStart;
   uint32_t alertEnd;
+};
+
+// Structs for RF communication
+struct syncStructHandle {
+  uint8_t header;
+  uint32_t myEpoch;
+  uint32_t readInterval;
+  uint32_t sendEpoch;
+};
+
+struct data1StructHandle
+{
+    uint8_t header;
+    uint16_t uv;
+    int16_t windDir;
+    float tempSHT;
+    float tempSoil;
+    float humidity;
+    float pressure;
+    float light;
+    float windSpeed;
+};
+
+struct data2StructHandle
+{
+    uint8_t header;
+    float rain;
+    float battery;
+    uint32_t epoch;
+    double solarJ;
+    double solarW;
 };
 
 #endif
