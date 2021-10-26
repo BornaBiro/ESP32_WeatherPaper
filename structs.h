@@ -85,4 +85,11 @@ struct forecastDisplayHandle
   char *weatherIcon;
 };
 
+struct oneCallApiHandle
+{
+  char alertEvent[50];
+  uint32_t alertStart;
+  uint32_t alertEnd;
+};
+
 #endif

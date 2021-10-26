@@ -13,6 +13,7 @@ class OWMWeather
     OWMWeather();
     uint8_t getCurrentWeather(const char* _url, struct currentWeatherHandle *_c);
     uint8_t getForecastWeather(const char* _url, struct forecastListHandle *_f, struct forecastDisplayHandle *_d);
+    uint8_t oneCall(const char *_url, oneCallApiHandle *_o);
     void removeCroLetters(char *p);
 };
 

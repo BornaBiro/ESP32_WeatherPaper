@@ -16,7 +16,8 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
   {
     if (http.GET() > 0)
     {
-      deserializeJson(doc, http.getStream());
+      DeserializationError err =  deserializeJson(doc, http.getStream());
+      if (err) return 0;
       if (doc["cod"] == 200)
       {
         strncpy(_c->weatherIcon, doc["weather"][0]["icon"], sizeof(_c->weatherIcon) - 1);
@@ -40,6 +41,10 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
         _c->sunrise += _c->timezone;
         _c->sunset = doc["sys"]["sunset"];
         _c->sunset += _c->timezone;
+      }
+      else
+      {
+        return 0;
       }
     }
     else
@@ -66,7 +71,8 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
   {
     if (http.GET() > 0)
     {
-      deserializeJson(doc, http.getStream());
+      DeserializationError err = deserializeJson(doc, http.getStream());
+      if (err) return 0;
       if (atoi(doc["cod"]) == 200)
       {
         _f->numberOfData = doc["cnt"];
@@ -119,7 +125,6 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
           //Serial.print(_f->startElement[i], DEC);
           //Serial.print(" end element:");
           //Serial.println(_f->startElement[i + 1], DEC);
-          int something = 0;
           float eastWestVectSum = 0;
           float northSouthVectSum = 0;
           for (int j = _f->startElement[i]; j < _f->startElement[i + 1]; j++)
@@ -140,25 +145,60 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
             //Serial.print(i, DEC);
             //Serial.print('/');
             //Serial.println(j, DEC);
-            something++;
           }
-          Serial.println(something, DEC);
           _d[i].avgPressure /= nElements;
           _d[i].avgHumidity /= nElements;
           eastWestVectSum /= nElements;
           northSouthVectSum /= nElements;
           _d[i].avgWindSpeed = sqrt((eastWestVectSum * eastWestVectSum) + (northSouthVectSum * northSouthVectSum));
           _d[i].avgWindDir = atan2(eastWestVectSum, northSouthVectSum) * 180 / PI;
-          _d[i].avgWindDir = (_d[i].avgWindDir >= 0?_d[i].avgWindDir:_d[i].avgWindDir + 360);
-          Serial.println(_d[i].avgWindDir);
+          _d[i].avgWindDir = (_d[i].avgWindDir >= 0 ? _d[i].avgWindDir : _d[i].avgWindDir + 360);
           //_d[i].avgWindSpeed /= nElements;
         }
         _f->shiftDay = 1;
         if (_f->startElement[1] - _f->startElement[0] < 3) _f->shiftDay = 0;
       }
+      else
+      {
+          return 0;
+      }
     }
     http.end();
   }
+}
+
+uint8_t OWMWeather::oneCall(const char *_url, oneCallApiHandle *_o)
+{
+  WiFiClient client;
+  HTTPClient http;
+  DynamicJsonDocument doc(25000);
+  //http.useHTTP10(true);
+
+  if (http.begin(client, _url))
+  {
+    if (http.GET() > 0)
+    {
+      DeserializationError err =  deserializeJson(doc, http.getStream());
+      if (err) return 0;
+      if (doc.containsKey("alerts"))
+      {
+        strncpy(_o->alertEvent, doc["alerts"][0]["event"], sizeof(_o->alertEvent));
+        _o->alertStart = doc["alerts"][0]["start"];
+        _o->alertEnd = doc["alerts"][0]["end"];
+      }
+
+    }
+    else
+    {
+      return 0;
+    }
+  }
+  else
+  {
+    return 0;
+  }
+  http.end();
+  return 1;
 }
 
 void OWMWeather::removeCroLetters(char *p)
