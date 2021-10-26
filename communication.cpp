@@ -48,7 +48,7 @@ uint8_t communication::sync(struct syncStructHandle *_s)
       if (temp[0] == SYNC_HEADER)
       {
         *_s = makeSyncStruct();
-        _myRf->writeAckPayload(1, _s, sizeof(struct syncStructHandle));
+        _myRf->writeAckPayload(1, _s, sizeof(syncStructHandle));
         syncOk = 1;
       }
     }
@@ -62,11 +62,51 @@ uint8_t communication::sync(struct syncStructHandle *_s)
   return syncOk;
 }
 
+uint8_t communication::getData(struct syncStructHandle *_s, struct data1StructHandle *_d1, struct data2StructHandle *_d2)
+{
+  _myRf->powerUp();
+  setupCommunication();
+
+  uint8_t dataRx = 0;
+  uint8_t rxTimeout = 25;
+  while (dataRx != 3 && rxTimeout != 0)
+  {
+    if (_myRf->available())
+    {
+      char temp[32];
+      while (_myRf->available())
+      {
+        _myRf->read(temp, 32);
+      }
+      if (temp[0] == DATA1_HEADER)
+      {
+        memcpy(_d1, temp, sizeof(data1StructHandle));
+        *_s = makeSyncStruct();
+        _myRf->writeAckPayload(1, _s, sizeof(syncStructHandle));
+        dataRx |= 1;
+      }
+      if (temp[0] == DATA2_HEADER)
+      {
+        memcpy(_d2, temp, sizeof(data2StructHandle));
+        *_s = makeSyncStruct();
+        _myRf->writeAckPayload(1, _s, sizeof(syncStructHandle));
+        dataRx |= 2;
+      }
+    }
+    delay(1000);
+    rxTimeout--;
+  }
+  _myRf->flush_tx();
+  _myRf->flush_rx();
+  _myRf->powerDown();
+  return dataRx;
+}
+
 struct syncStructHandle communication::makeSyncStruct()
 {
   syncStructHandle _s = {SYNC_HEADER};
-  _s.myEpoch = _rtc->getClock();
-  _s.sendEpoch = newWakeupTime(_s.myEpoch);
+  _s.myEpoch = (uint32_t)(_rtc->getClock());
+  _s.sendEpoch = (uint32_t)newWakeupTime((time_t)_s.myEpoch);
   return _s;
 }
 

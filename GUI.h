@@ -50,7 +50,7 @@ class GUI
     public:
     GUI();
     void init(Inkplate *_inkPtr);
-    void drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct tm *_time);
+    void drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct data1StructHandle *_d1, struct tm *_time);
     void drawSelectedDay(struct forecastListHandle *_forecastList);
     //void printStringCenter(char *buf, int x, int y);
     void printAlignText(char *text, int16_t x, int16_t y, enum alignment align);

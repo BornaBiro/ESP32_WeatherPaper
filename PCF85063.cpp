@@ -51,7 +51,7 @@ void pcf85063::RTCinit(uint8_t resetRTC)
   writeRegisters(PCF85063_CTRL1, &regData, 1);
 }
 
-uint32_t pcf85063::getClock()
+time_t pcf85063::getClock()
 {
   uint8_t regData[7];
   struct tm _myTime;
@@ -89,6 +89,7 @@ void pcf85063::setAlarm(time_t _epoch)
   struct tm _myTime;
 
   clearAlarm();
+  disableAlarm();
 
   memcpy(&_myTime, localtime((const time_t*)&_epoch), sizeof(tm));
   regData[0] = dec2bcd(_myTime.tm_sec);

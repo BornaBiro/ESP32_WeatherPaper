@@ -36,6 +36,7 @@
 #define DISPLAY_FONT_SMALL &RobotoCondensed_Regular6pt7b
 
 #define NEW_INKPLATE
+#define WAKEUP_INTERVAL 120
 
 // Objects / constructors
 Inkplate display(INKPLATE_1BIT);
@@ -52,12 +53,13 @@ RF24_Inkplate radio(14, 15, 2000000);
 struct tm tNow;
 //timeval tm;
 //const timeval* tmPtr = &tm;
-time_t myTime;
 time_t timeToWake;
 int timeOffset;
 
-const char ssid[] = "Biro_WLAN";
-const char pass[] = "CaVex250_H2sH11";
+//const char ssid[] = "Biro_WLAN";
+//const char pass[] = "CaVex250_H2sH11";
+const char ssid[] = "Optima-322d0e";
+const char pass[] = "OPTIMA2649004925";
 
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
@@ -70,6 +72,8 @@ struct forecastListHandle forecastList;
 struct forecastDisplayHandle forecastDisplay[7];
 struct oneCallApiHandle oneCallApi;
 struct syncStructHandle syncStruct;
+struct data1StructHandle data1Struct;
+struct data2StructHandle data2Struct;
 
 void setup()
 {
@@ -164,6 +168,7 @@ void setup()
 
   readSensor(&sensor);
   updateWeatherData();
+  time_t myTime;
   if (!rtc.isClockSet() && readNTP(&myTime))
   {
     //settimeofday(tmPtr, NULL);
@@ -180,8 +185,9 @@ void setup()
     display.display();
   }
 
-  timeToWake = 1200 + myTime;
-  gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &tNow);
+  timeToWake = (time_t)syncStruct.sendEpoch;
+  rtc.setAlarm(timeToWake);
+  gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
   esp_wifi_stop();
   btStop();
 }
@@ -189,16 +195,8 @@ void setup()
 void loop()
 {
   int tsX, tsY;
-  display.digitalWriteMCP(15, HIGH);
   rtc_gpio_isolate(GPIO_NUM_12);
-  //gettimeofday(&tm, NULL);
-  //esp_sleep_enable_timer_wakeup((timeToWake - tm.tv_sec) * 1000000ULL); //20 minuta
-  rtc.setAlarm(timeToWake);
-  #ifdef NEW_INKPLATE
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34, 1);
-  #elif
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
-  #endif
   esp_light_sleep_start();
   uint16_t intPins = display.getINTInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
@@ -230,7 +228,7 @@ void loop()
       case 1:
         if (touchArea(tsX, tsY, 10, 570, 30, 30))
         {
-          gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &tNow);
+          gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
           modeSelect = 0;
           selectedDay = 0;
           selectedGraph = 0;
@@ -325,37 +323,41 @@ void loop()
 
   if ((rtc.checkAlarmFlag() && (intPins & (1 << 12))) || forcedRef)
   {
-    rtc.clearAlarm();
-    forcedRef = 0;
-    modeSelect = 0;
-    selectedDay = 0;
     display.setFont(DISPLAY_FONT_SMALL);
     display.setTextSize(1);
     display.setCursor(550, 46);
     display.print("Dohvacanje novih podataka");
-    esp_wifi_start();
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, pass);
-    int i = 0;
-    while (WiFi.status() != WL_CONNECTED)
+    display.partialUpdate();
+    if (!forcedRef)
     {
-      delay(1000);
-      i++;
-      if (i > 15) break;
-      display.print('.');
-      display.partialUpdate();
+      rtc.clearAlarm();
+      rf.getData(&syncStruct, &data1Struct, &data2Struct);
+      timeToWake = (time_t)syncStruct.sendEpoch;
+      rtc.setAlarm(timeToWake);
     }
-
+    forcedRef = 0;
+    modeSelect = 0;
+    selectedDay = 0;
+    selectedGraph = 0;
+    //esp_wifi_start();
+    //WiFi.mode(WIFI_STA);
+    //WiFi.begin(ssid, pass);
+    //int i = 0;
+    //while (WiFi.status() != WL_CONNECTED)
+    //{
+    //  delay(1000);
+    //  i++;
+    //  if (i > 15) break;
+    //  display.print('.');
+    //  display.partialUpdate();
+    //}
     readSensor(&sensor);
-    if (WiFi.status() == WL_CONNECTED) updateWeatherData();
+    //if (WiFi.status() == WL_CONNECTED) updateWeatherData();
     //gettimeofday(&tm, NULL);
-    myTime = rtc.getClock();
-    tNow = epochToHuman(myTime);
-    timeToWake = 1200 + myTime;
-    rtc.setAlarm(timeToWake);
-    gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &tNow);
-    esp_wifi_stop();
-    btStop();
+    tNow = epochToHuman(rtc.getClock());
+    gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
+    //esp_wifi_stop();
+    //btStop();
   }
 }
 

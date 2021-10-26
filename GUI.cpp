@@ -10,7 +10,7 @@ void GUI::init(Inkplate *_inkPtr)
   _ink = _inkPtr;
 }
 
-void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct tm *_time)
+void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct data1StructHandle *_d1, struct tm *_time)
 {
     char tmp[50];
     _ink->clearDisplay();
@@ -104,6 +104,12 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
     {
         _ink->fillRect(267 * i, 60, 3, 290, BLACK);
     }
+
+    _ink->setFont(DISPLAY_FONT);
+    _ink->setCursor(600, 150);
+    _ink->print(_d1->tempSHT, 1);
+    _ink->setCursor(600, 250);
+    _ink->print(_d1->humidity, 1);
     _ink->display();
 }
 

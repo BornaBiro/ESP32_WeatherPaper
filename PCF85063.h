@@ -41,7 +41,7 @@ class pcf85063
     public:
     pcf85063();
     void RTCinit(uint8_t resetRTC = 0);
-    uint32_t getClock();
+    time_t getClock();
     void setClock(time_t _epoch);
     void setAlarm(time_t _epoch);
     void disableAlarm();
