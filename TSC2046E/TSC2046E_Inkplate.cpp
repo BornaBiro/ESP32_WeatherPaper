@@ -12,6 +12,7 @@ void TSC2046E_Inkplate::begin(SPIClass *_s, Inkplate * _i, uint8_t _cs, uint8_t 
     _csPin = _cs;
     _irqPin = _irq;
     _ink->pinModeInternal(MCP23017_INT_ADDR, _ink->mcpRegsInt, _csPin, OUTPUT);
+    _ink->digitalWriteInternal(MCP23017_INT_ADDR, _ink->mcpRegsInt, _csPin, HIGH);
     _ink->pinModeInternal(MCP23017_INT_ADDR, _ink->mcpRegsInt, _irqPin, INPUT_PULLUP);
 }
 
