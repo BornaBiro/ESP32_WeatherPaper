@@ -113,20 +113,6 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
     _ink->display();
 }
 
-void GUI::drawSelectedDay(struct forecastListHandle *_forecastList)
-{
-
-}
-
-//void GUI::printStringCenter(char *buf, int x, int y)
-//{
-//    int16_t x1, y1;
-//    uint16_t w, h;
-//    _ink->getTextBounds(buf, x, y, &x1, &y1, &w, &h); //calc width of new string
-//    _ink->setCursor(x - w / 2, y);
-//    _ink->print(buf);
-//}
-
 void GUI::printAlignText(char *text, int16_t x, int16_t y, enum alignment align)
 {
   int16_t x1, y1;
@@ -217,7 +203,7 @@ void GUI::drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xDa
   uint8_t _ySpacing = _h / _m;
   for (int i = 0; i < _n; i++)
   {
-    char temp[16];
+    char temp[10];
     time_t _epoch = (*(uint32_t*)((uint8_t*)(_xData) + (_step * i)));
     _time = localtime((const time_t*)&_epoch);
     _ink->drawFastVLine(_x + (i * _xSpacing) + (_xSpacing / 2), _y, _h + 3, BLACK);
@@ -243,7 +229,7 @@ void GUI::drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xDa
   // Draw data on y axis
   for (int i = 0; i < (_m + 1); i++)
   {
-    char temp[10];
+    char temp[20];
     sprintf(temp, "%.1f", _dataMax - (i * _yStep));
     //_d->setCursor(_x - 30, _y + (_ySpacing * i) - 3);
     _ink->drawFastHLine(_x - 2, _y + (_ySpacing * i), _w, BLACK);

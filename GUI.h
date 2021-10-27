@@ -51,8 +51,6 @@ class GUI
     GUI();
     void init(Inkplate *_inkPtr);
     void drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct data1StructHandle *_d1, struct tm *_time);
-    void drawSelectedDay(struct forecastListHandle *_forecastList);
-    //void printStringCenter(char *buf, int x, int y);
     void printAlignText(char *text, int16_t x, int16_t y, enum alignment align);
     void drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xData, void *_yData, uint8_t _n, uint8_t _step, uint8_t _m, enum graphDataType _dataType, graphStyle _style, float _min = sqrt(-1), float _max = sqrt(-1));
     uint8_t* weatherIcon(uint8_t i);

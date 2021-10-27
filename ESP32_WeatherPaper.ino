@@ -11,12 +11,12 @@
 #include "Weather.h"
 
 // Display includes (driver, icons, fonts, etc)
-#include "Inkplate.h"
+#include <Inkplate.h>
 #include "GUI.h"
 #include "Neucha_Regular17pt7b.h"
 #include "RobotoCondensed_Regular6pt7b.h"
 #include "icons.h"
-#include "TSC2046E_Inkplate.h"
+#include <TSC2046E_Inkplate.h>
 
 // Sensor includes
 #include <Adafruit_Sensor.h>
@@ -25,10 +25,13 @@
 // Other includes
 #include "sys/time.h"
 #include "structs.h"
-#include "EEPROM.h"
+#include <EEPROM.h>
 #include "PCF85063.h"
 #include "communication.h"
 #include "RF24_Inkplate.h"
+
+// SD Card Library
+#include <SdFat.h>
 
 //.ttf to .h: https://rop.nl/truetype2gfx/
 //Open Source fonts https://fonts.google.com/
@@ -36,7 +39,6 @@
 #define DISPLAY_FONT_SMALL &RobotoCondensed_Regular6pt7b
 
 #define NEW_INKPLATE
-#define WAKEUP_INTERVAL 120
 
 // Objects / constructors
 Inkplate display(INKPLATE_1BIT);
@@ -56,15 +58,16 @@ struct tm tNow;
 time_t timeToWake;
 int timeOffset;
 
-//const char ssid[] = "Biro_WLAN";
-//const char pass[] = "CaVex250_H2sH11";
-const char ssid[] = "Optima-322d0e";
-const char pass[] = "OPTIMA2649004925";
+const char ssid[] = "Biro_WLAN";
+const char pass[] = "CaVex250_H2sH11";
+//const char ssid[] = "Optima-322d0e";
+//const char pass[] = "OPTIMA2649004925";
 
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
 uint8_t selectedDay = 0;
 uint8_t selectedGraph = 0;
+uint8_t wifiCounter = 0;
 
 struct sensorData sensor;
 struct currentWeatherHandle currentWeather;
@@ -77,11 +80,14 @@ struct data2StructHandle data2Struct;
 
 void setup()
 {
+  uint8_t sdError = 0;
+  uint8_t bmeError = 0;
+  uint8_t radioError = 0;
+
   Serial.begin(115200);
   Wire.begin();
   display.begin();
 
-  #ifdef NEW_INKPLATE
   // Set output mode of MCP INT pin
   display.setIntOutputInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 1, 0, 0, 1);
 
@@ -103,7 +109,6 @@ void setup()
 
   // Clear all INT flags on MCP
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
-  #endif
 
   gui.init(&display);
   rf.init(&radio, &display, &rtc);
@@ -111,23 +116,16 @@ void setup()
 
   mySpi = display.getSPIptr();
   mySpi->begin(14, 12, 13, 15);
-  #ifdef NEW_INKPLATE
   ts.begin(mySpi, &display, 10, 13);
-  #elif
-  ts.begin(mySpi, &display, 13, 14);
-  #endif
   ts.calibrate(800, 3420, 3553, 317, 0, 799, 0, 599);
 
-  if (!radio.begin(mySpi, &display))
-  {
-    Serial.println("Radio init ERROR!");
-    while (1);
-  }
+  radioError = radio.begin(mySpi, &display);
+  bmeError = bme.begin(0x76);
+  sdError = display.sdCardInit();
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   WiFi.setHostname("WeatherPaper");
-  bme.begin(0x76);
   bme.setSampling(Adafruit_BME280::MODE_FORCED,
                   Adafruit_BME280::SAMPLING_X16, // temperature
                   Adafruit_BME280::SAMPLING_X16, // pressure
@@ -137,6 +135,38 @@ void setup()
   display.setFont(DISPLAY_FONT);
   display.setTextColor(BLACK, WHITE);
   display.setCursor(0, 24);
+
+  if (!(sdError && bmeError && radioError))
+  {
+    display.print("Pogreška s ");
+    if (!sdError)
+    {
+      display.print("SD karticom");
+      display.setCursor(0, display.getCursorY() + 24);
+    }
+    if (!bmeError)
+    {
+      display.print("senzorom temp., vlage i tlaka");
+      display.setCursor(0, display.getCursorY() + 24);
+    }
+    if (!radioError)
+    {
+      display.print("radijskim modulom");
+      display.setCursor(0, display.getCursorY() + 24);
+    }
+    display.print("Provjerite modul i ponovno pokrenite uredjaj!");
+    display.display();
+    esp_deep_sleep_start();
+    while(1);
+  }
+
+  struct data1StructHandle sdData1[20];
+  struct data2StructHandle sdData2[20];
+  if (!rf.getOutdoorDataFromSD(1635339675, 20, sdData1, sdData2))
+  {
+    Serial.println("Reading SD Data error");
+  }
+
   int n = WiFi.scanNetworks();
   if (n > 6) n = 6;
   display.clearDisplay();
@@ -174,19 +204,17 @@ void setup()
     //settimeofday(tmPtr, NULL);
     rtc.setClock(myTime);
     //gettimeofday(&tm, NULL);
+    rf.setupCommunication();
+    if (rf.sync(&syncStruct))
+    {
+      display.clearDisplay();
+      display.print("sync succ!");
+      display.display();
+    }
+    timeToWake = (time_t)syncStruct.sendEpoch;
+    rtc.setAlarm(timeToWake);
   }
   tNow = epochToHuman(rtc.getClock());
-
-  rf.setupCommunication();
-  if (rf.sync(&syncStruct))
-  {
-    display.clearDisplay();
-    display.print("sync succ!");
-    display.display();
-  }
-
-  timeToWake = (time_t)syncStruct.sendEpoch;
-  rtc.setAlarm(timeToWake);
   gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
   esp_wifi_stop();
   btStop();
@@ -222,6 +250,20 @@ void loop()
           writeInfoBox(350, "Osvjez. podataka, pricekajte");
           display.partialUpdate();
           forcedRef = 1;
+        }
+
+        if (touchArea(tsX, tsY, 267, 60, 267, 290))
+        {
+          display.setFont(DISPLAY_FONT);
+          gui.printAlignText("Indoor stuff", 400, 300, ALIGMENT_CENTER);
+          display.partialUpdate();
+        }
+
+        if (touchArea(tsX, tsY, 534, 60, 267, 290))
+        {
+          display.setFont(DISPLAY_FONT);
+          gui.printAlignText("Outdoor stuff", 400, 300, ALIGMENT_CENTER);
+          display.partialUpdate();
         }
         break;
 
@@ -313,7 +355,6 @@ void loop()
             display.print(forecastList.forecast[element].rain, 1);
             display.print("mm");
           }
-
           display.setTextSize(1);
           display.partialUpdate();
         }
@@ -328,36 +369,43 @@ void loop()
     display.setCursor(550, 46);
     display.print("Dohvacanje novih podataka");
     display.partialUpdate();
+    readSensor(&sensor);
     if (!forcedRef)
     {
       rtc.clearAlarm();
-      rf.getData(&syncStruct, &data1Struct, &data2Struct);
+      uint8_t _rxOk = rf.getData(&syncStruct, &data1Struct, &data2Struct);
       timeToWake = (time_t)syncStruct.sendEpoch;
       rtc.setAlarm(timeToWake);
+      if (_rxOk) rf.saveDataToSD(&sensor, &data1Struct, &data2Struct);
+    }
+    wifiCounter++;
+
+    if (wifiCounter > 4 || forcedRef)
+    {
+      Serial.println("New weateher req");
+      wifiCounter = 0;
+      esp_wifi_start();
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(ssid, pass);
+      int i = 0;
+      while (WiFi.status() != WL_CONNECTED)
+      {
+        delay(1000);
+        i++;
+        if (i > 15) break;
+        display.print('.');
+        display.partialUpdate();
+      }
+      if (WiFi.status() == WL_CONNECTED) updateWeatherData();
+      esp_wifi_stop();
+      btStop();
     }
     forcedRef = 0;
     modeSelect = 0;
     selectedDay = 0;
     selectedGraph = 0;
-    //esp_wifi_start();
-    //WiFi.mode(WIFI_STA);
-    //WiFi.begin(ssid, pass);
-    //int i = 0;
-    //while (WiFi.status() != WL_CONNECTED)
-    //{
-    //  delay(1000);
-    //  i++;
-    //  if (i > 15) break;
-    //  display.print('.');
-    //  display.partialUpdate();
-    //}
-    readSensor(&sensor);
-    //if (WiFi.status() == WL_CONNECTED) updateWeatherData();
-    //gettimeofday(&tm, NULL);
     tNow = epochToHuman(rtc.getClock());
     gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
-    //esp_wifi_stop();
-    //btStop();
   }
 }
 
@@ -380,12 +428,11 @@ void writeInfoBox(int y, char* c)
 
 void readSensor(struct sensorData *_s)
 {
-  //#ifndef NEW_INKPLATE  
+  _s->timeStamp = (uint32_t)rtc.getClock();
   bme.takeForcedMeasurement();
   _s->temp = bme.readTemperature();
   _s->humidity = bme.readHumidity();
   _s->pressure = bme.readPressure() / 100.0F;
-  //#endif
 }
 
 bool readNTP(time_t *_epoch)
@@ -549,58 +596,4 @@ uint8_t touchArea(int16_t tsX, int16_t tsY, int16_t x, int16_t y, int16_t w, int
 {
   if ((tsX >= x) && (tsY >= y) && (tsX < (x + w)) && (tsY < (y + h))) return 1;
   return 0;
-}
-
-void drawGraph(int x, int y, char *dx, float *dy, char *tx, char *ty, int sizex, int sizey, char n, char decimal, char yelements)
-{
-  char digits = 0;
-  float maxValueX = dx[0], minValueX = dx[0];
-  float maxValueY = dy[0], minValueY = dy[0];
-  int stepX;
-  float stepY;
-  int stepYGraph;
-  for (int i = 0; i < n; i++)
-  {
-    if (maxValueY < dy[i]) maxValueY = dy[i];
-    if (minValueY > dy[i]) minValueY = dy[i];
-  }
-  stepY = (maxValueY - minValueY) / (yelements + 1);
-  digits = (int) log10(maxValueY) + 1 + (decimal != 0 ? 1 + decimal : 0);
-  display.fillRect(x + (digits * 6), y + sizey, sizex, 2, BLACK);
-  display.fillRect(x + (digits * 6), y, 2, sizey, BLACK);
-  stepX = sizex / n;
-  display.setFont(NULL);
-  display.setTextSize(1);
-  int x1, y1, x2, y2;
-  for (int i = 0; i < n - 1; i++)
-  {
-    x1 = i * stepX + x + (digits * 6);
-    x2 = (i + 1) * stepX + x + (digits * 6);
-    y1 = gui.map2(dy[i], minValueY, maxValueY, y + sizey, y);
-    y2 = gui.map2(dy[i + 1], minValueY, maxValueY, y + sizey, y);
-    display.drawLine(x1, y1, x2, y2, BLACK);
-    display.fillCircle(x1, y1, 2, BLACK);
-  }
-  display.fillCircle(x2, y2, 2, BLACK);
-
-  stepYGraph = sizey / (yelements + 1);
-  for (int i = 0; i < yelements + 2; i++)
-  {
-    for (int j = 0; j < n; j++)
-    {
-      if (i == 0)
-      {
-        display.setCursor(x + (digits * 6) + (stepX * j), y + sizey + 9);
-        display.print(dx[j], DEC);
-      }
-      x2 = j * stepX + x + (digits * 6);
-      display.fillCircle(x2, y + (sizey) - (stepYGraph * i), 1, BLACK);
-    }
-    display.setCursor(x, y + (sizey) - (stepYGraph * i) - 3);
-    display.print(minValueY + (stepY * i), decimal);
-  }
-  display.setCursor(x + (digits * 6) + (stepX * n + 1), y + sizey + 9);
-  display.print(tx);
-  display.setCursor(x, y - 10);
-  display.print(ty);
 }
