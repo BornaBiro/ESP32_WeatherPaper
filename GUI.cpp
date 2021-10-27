@@ -10,7 +10,7 @@ void GUI::init(Inkplate *_inkPtr)
   _ink = _inkPtr;
 }
 
-void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct data1StructHandle *_d1, struct tm *_time)
+void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct measruementHandle *_d1, struct tm *_time)
 {
     char tmp[50];
     _ink->clearDisplay();
@@ -163,8 +163,8 @@ void GUI::printAlignText(char *text, int16_t x, int16_t y, enum alignment align)
 void GUI::drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xData, void *_yData, uint8_t _n, uint8_t _step, uint8_t _m, enum graphDataType _dataType, graphStyle _style, float _min, float _max)
 {
   // First copy data into local array
-  float *_intArray;
-  _intArray = (float*)malloc(_n * sizeof(float));
+  double *_intArray;
+  _intArray = (double*)malloc(_n * sizeof(double));
   if (_intArray == NULL) return;
 
   // Fill the array with the data

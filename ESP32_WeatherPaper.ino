@@ -75,8 +75,7 @@ struct forecastListHandle forecastList;
 struct forecastDisplayHandle forecastDisplay[7];
 struct oneCallApiHandle oneCallApi;
 struct syncStructHandle syncStruct;
-struct data1StructHandle data1Struct;
-struct data2StructHandle data2Struct;
+struct measruementHandle outdoorData;
 
 void setup()
 {
@@ -157,14 +156,7 @@ void setup()
     display.print("Provjerite modul i ponovno pokrenite uredjaj!");
     display.display();
     esp_deep_sleep_start();
-    while(1);
-  }
-
-  struct data1StructHandle sdData1[20];
-  struct data2StructHandle sdData2[20];
-  if (!rf.getOutdoorDataFromSD(1635339675, 20, sdData1, sdData2))
-  {
-    Serial.println("Reading SD Data error");
+    while (1);
   }
 
   int n = WiFi.scanNetworks();
@@ -215,7 +207,7 @@ void setup()
     rtc.setAlarm(timeToWake);
   }
   tNow = epochToHuman(rtc.getClock());
-  gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
+  gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
   esp_wifi_stop();
   btStop();
 }
@@ -261,16 +253,38 @@ void loop()
 
         if (touchArea(tsX, tsY, 534, 60, 267, 290))
         {
-          display.setFont(DISPLAY_FONT);
-          gui.printAlignText("Outdoor stuff", 400, 300, ALIGMENT_CENTER);
-          display.partialUpdate();
+          struct measruementHandle *sdData;
+          int16_t enteries = rf.getNumberOfEntries(1635339675, COMMUNICATION_OUTDDOR);
+          sdData = (struct measruementHandle *)ps_malloc(sizeof(measruementHandle) * enteries);
+          if (sdData != NULL && enteries > 0)
+          {
+            if (!rf.getOutdoorDataFromSD(1635339675, enteries, sdData))
+            {
+              Serial.println("Reading SD Data error");
+            }
+            for (int i = 0; i < enteries; i++)
+            {
+              Serial.println(sdData[i].tempSHT, 2);
+            }
+            if (enteries > 10) enteries = 10;
+            display.clearDisplay();
+            display.setFont();
+            display.setTextSize(2);
+            gui.drawGraph(130, 200, 600, 300, &(sdData[0].epoch), &(sdData[0].tempSHT), enteries, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+            display.display();
+            free(sdData);
+          }
+          else
+          {
+            Serial.println("Dynamic allocation error!!!");
+          }
         }
         break;
 
       case 1:
         if (touchArea(tsX, tsY, 10, 570, 30, 30))
         {
-          gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
+          gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
           modeSelect = 0;
           selectedDay = 0;
           selectedGraph = 0;
@@ -373,10 +387,10 @@ void loop()
     if (!forcedRef)
     {
       rtc.clearAlarm();
-      uint8_t _rxOk = rf.getData(&syncStruct, &data1Struct, &data2Struct);
+      uint8_t _rxOk = rf.getData(&syncStruct, &outdoorData);
       timeToWake = (time_t)syncStruct.sendEpoch;
       rtc.setAlarm(timeToWake);
-      if (_rxOk) rf.saveDataToSD(&sensor, &data1Struct, &data2Struct);
+      if (_rxOk) rf.saveDataToSD(&sensor, &outdoorData);
     }
     wifiCounter++;
 
@@ -405,7 +419,7 @@ void loop()
     selectedDay = 0;
     selectedGraph = 0;
     tNow = epochToHuman(rtc.getClock());
-    gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &data1Struct, &tNow);
+    gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
   }
 }
 
@@ -547,7 +561,7 @@ void drawSelectedGraph(uint8_t _graph, uint8_t _day)
   display.setFont(NULL);
   display.setTextSize(2);
   display.fillRect(0, 170, 800, 360, WHITE);
-  switch(_graph)
+  switch (_graph)
   {
     case 0:
       gui.printAlignText("Temperatura zraka [C]", 400, 195, ALIGMENT_CENTERBOT);
@@ -589,7 +603,7 @@ void drawSelectedGraph(uint8_t _graph, uint8_t _day)
       gui.printAlignText("Vjerojatnost oborina [%]", 400, 195, ALIGMENT_CENTERBOT);
       gui.drawGraph(130, 200, 600, 300, &(forecastList.forecast[start].timestamp), &(forecastList.forecast[start].probability), _n, sizeof(struct forecastWeatherHandle), 10, DATATYPE_UINT8_T, GRAPHSTYLE_COLUMN, 0, 100);
       break;
-    }
+  }
 }
 
 uint8_t touchArea(int16_t tsX, int16_t tsY, int16_t x, int16_t y, int16_t w, int16_t h)

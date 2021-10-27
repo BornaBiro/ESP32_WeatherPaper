@@ -62,10 +62,12 @@ uint8_t communication::sync(struct syncStructHandle *_s)
   return syncOk;
 }
 
-uint8_t communication::getData(struct syncStructHandle *_s, struct data1StructHandle *_d1, struct data2StructHandle *_d2)
+uint8_t communication::getData(struct syncStructHandle *_s, struct measruementHandle *_h)
 {
   _myRf->powerUp();
   setupCommunication();
+  struct data1StructHandle _d1 = {0};
+  struct data2StructHandle _d2 = {0};
 
   uint8_t dataRx = 0;
   uint8_t rxTimeout = 25;
@@ -80,16 +82,29 @@ uint8_t communication::getData(struct syncStructHandle *_s, struct data1StructHa
       }
       if (temp[0] == DATA1_HEADER)
       {
-        memcpy(_d1, temp, sizeof(data1StructHandle));
+        memcpy(&_d1, temp, sizeof(data1StructHandle));
         *_s = makeSyncStruct();
         _myRf->writeAckPayload(1, _s, sizeof(syncStructHandle));
+        _h->humidity = _d1.humidity;
+        _h->light = _d1.light;
+        _h->pressure = _d1.pressure;
+        _h->tempSHT = _d1.tempSHT;
+        _h->tempSoil = _d1.tempSoil;
+        _h->uv = _d1.uv;
+        _h->windDir = _d1.windDir;
+        _h->windSpeed = _d1.windSpeed;
         dataRx |= 1;
       }
       if (temp[0] == DATA2_HEADER)
       {
-        memcpy(_d2, temp, sizeof(data2StructHandle));
+        memcpy(&_d2, temp, sizeof(data2StructHandle));
         *_s = makeSyncStruct();
         _myRf->writeAckPayload(1, _s, sizeof(syncStructHandle));
+        _h->battery = _d2.battery;
+        _h->epoch = _d2.epoch;
+        _h->rain = _d2.rain;
+        _h->solarJ = _d2.solarJ;
+        _h->solarW = _d2.solarW;
         dataRx |= 2;
       }
     }
@@ -102,11 +117,11 @@ uint8_t communication::getData(struct syncStructHandle *_s, struct data1StructHa
   return dataRx;
 }
 
-uint8_t communication::saveDataToSD(struct sensorData *_s, struct data1StructHandle *_d1, struct data2StructHandle *_d2)
+uint8_t communication::saveDataToSD(struct sensorData *_s, struct measruementHandle* _d)
 {
   SdFile _file;
   SdFat *_sd = _ink->getSdFat();
-  char _tempStr[400];
+  char _tempStr[600];
   struct tm *_t;
   time_t _rtcEpoch;
   if (!_sd->begin(15, SD_SCK_MHZ(25))) return 0;
@@ -134,9 +149,9 @@ uint8_t communication::saveDataToSD(struct sensorData *_s, struct data1StructHan
     _rtcEpoch = _rtc->getClock();
     _t = localtime((time_t*) & (_rtcEpoch));
     _file.timestamp(T_ACCESS | T_CREATE | T_WRITE, _t->tm_year + 1900, _t->tm_mon + 1, _t->tm_mday, _t->tm_hour, _t->tm_min, _t->tm_sec);
-    _rtcEpoch = (time_t)(_d2->epoch);
+    _rtcEpoch = (time_t)(_d->epoch);
     _t = localtime((const time_t*) & (_rtcEpoch));
-    sprintf(_tempStr, _outdoorDataEntry, 0, _d2->epoch, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900, _t->tm_hour, _t->tm_min, _t->tm_sec, _d2->battery, _d1->tempSHT, _d1->tempSoil, _d1->humidity, _d1->pressure, _d1->light, _d1->uv / 100.0, _d2->solarJ, _d2->solarW, _d1->windSpeed, _d1->windDir, _d2->rain);
+    sprintf(_tempStr, _outdoorDataEntry, 0, _d->epoch, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900, _t->tm_hour, _t->tm_min, _t->tm_sec, _d->battery, _d->tempSHT, _d->tempSoil, _d->humidity, _d->pressure, _d->light, _d->uv / 100.0, _d->solarJ, _d->solarW, _d->windSpeed, _d->windDir, _d->rain);
     _file.println(_tempStr);
     _file.close();
   }
@@ -187,7 +202,7 @@ int16_t communication::getNumberOfEntries(time_t _epoch, uint8_t _indoor)
   _rtcEpoch = _rtc->getClock();
   _t = localtime((const time_t*)&_rtcEpoch);
   sprintf(_temp, _folderPath, _indoor == COMMUNICATION_INDDOR ? _folderIndoor : _folderOutdoor, _t->tm_year + 1900);
-  if (_sd->chdir(_temp)) return -2;
+  if (!_sd->chdir(_temp)) return -2;
 
   sprintf(_temp, _filenameStr, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900);
   if (!_file.open(_temp, O_RDONLY)) return -1;
@@ -195,14 +210,14 @@ int16_t communication::getNumberOfEntries(time_t _epoch, uint8_t _indoor)
   while (_file.available())
   {
     char c = _file.peek();
-    if (c == '\n') _n;
+    if (c == '\n') _n++;
     _file.seekCur(1);
   }
   _file.close();
-  return _n;
+  return _n - 1;
 }
 
-uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct data1StructHandle *_d1, struct data2StructHandle *_d2)
+uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct measruementHandle* _d)
 {
   char _temp[50];
   SdFile _file;
@@ -224,7 +239,7 @@ uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct da
   {
     int _entries = 0;
     uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 1));
-    char *_oneLine = (char*)ps_malloc(sizeof(char) * (300));
+    char *_oneLine = (char*)ps_malloc(sizeof(char) * (600));
     if (_dataStartPos == NULL || _oneLine == NULL) return 0;
 
     // Find start of each new line
@@ -234,27 +249,26 @@ uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct da
       if (_file.read() == '\n')
       {
         _dataStartPos[_entries] = _file.curPosition();
-        Serial.println(_dataStartPos[_entries], DEC);
         _entries++;
       }
     }
 
+    if (_entries < _n) _n = _entries;
+    
     for (int i = 0; i < _n; i++)
     {
       // Copy each line in buffer
       uint32_t _size = _dataStartPos[i + 1] - _dataStartPos[i] - 2;
       _file.seekSet(_dataStartPos[i]);
       _file.read(_oneLine, _size);
+      
       _oneLine[_size] = 0;
       _oneLine[_size + 1] = '\r';
       _oneLine[_size + 2] = '\n';
       float _uv;
-      int _dummy1;
-      int _dummy2;
-      Serial.println(_oneLine);
-      sscanf(_oneLine, _outdoorDataEntrySD, &_dummy1, &(_d2->epoch), &_dummy2, &_dummy2, &_dummy2, &_dummy2, &_dummy2, &_dummy2, &(_d2->battery), &(_d1->tempSHT), &(_d1->tempSoil), &(_d1->humidity), &( _d1->pressure), &(_d1->light), &_uv, &( _d2->solarJ), &(_d2->solarW), &(_d1->windSpeed), &(_d1->windDir), &(_d2->rain));
-      _d1->uv = _uv * 100;
-      Serial.println(_d2->battery, 2);
+      int _dummy;
+      sscanf(_oneLine, _outdoorDataEntrySD, &_dummy, &(_d[i].epoch), &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].tempSHT), &(_d[i].tempSoil), &(_d[i].humidity), &( _d[i].pressure), &(_d[i].light), &_uv, &( _d[i].solarJ), &(_d[i].solarW), &(_d[i].windSpeed), &(_d[i].windDir), &(_d[i].rain));
+      _d[i].uv = _uv * 100;
     }
     free(_dataStartPos);
     free(_oneLine);

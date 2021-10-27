@@ -107,6 +107,23 @@ struct syncStructHandle {
   uint32_t sendEpoch;
 };
 
+struct measruementHandle
+{
+    uint16_t uv;
+    int16_t windDir;
+    float tempSHT;
+    float tempSoil;
+    float humidity;
+    float pressure;
+    float light;
+    float windSpeed;
+    float rain;
+    float battery;
+    uint32_t epoch;
+    double solarJ;
+    double solarW;
+};
+
 struct data1StructHandle
 {
     uint8_t header;
