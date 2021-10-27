@@ -5,7 +5,7 @@
 #include "structs.h"
 #include "PCF85063.h"
 
-#define WAKEUP_INTERVAL         5
+#define WAKEUP_INTERVAL         2
 #define COMMUNICATION_INDDOR    0
 #define COMMUNICATION_OUTDDOR   1
 
@@ -20,6 +20,7 @@ class communication
     uint8_t saveDataToSD(struct sensorData *_s, struct measruementHandle* _d);
     int16_t getNumberOfEntries(time_t _epoch, uint8_t _indoor);
     uint8_t getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct measruementHandle* _d);
+    uint8_t getIndoorDataFromSD(time_t _epoch, int16_t _n, struct sensorData* _d);
     void getFileNameFromEpoch(char *_s, time_t _epoch);
     void getFolderPath(char *_s, time_t _epoch, uint8_t _indoor);
 

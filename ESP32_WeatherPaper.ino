@@ -51,23 +51,23 @@ pcf85063 rtc;
 communication rf;
 RF24_Inkplate radio(14, 15, 2000000);
 
-// Contains hour, minutes, seconds, ...
+// Consts for hour, minutes, seconds, ...
 struct tm tNow;
-//timeval tm;
-//const timeval* tmPtr = &tm;
 time_t timeToWake;
 int timeOffset;
 
-const char ssid[] = "Biro_WLAN";
-const char pass[] = "CaVex250_H2sH11";
-//const char ssid[] = "Optima-322d0e";
-//const char pass[] = "OPTIMA2649004925";
+//const char ssid[] = "Biro_WLAN";
+//const char pass[] = "CaVex250_H2sH11";
+const char ssid[] = "Optima-322d0e";
+const char pass[] = "OPTIMA2649004925";
 
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
 uint8_t selectedDay = 0;
 uint8_t selectedGraph = 0;
 uint8_t wifiCounter = 0;
+uint32_t sdDataDayOffset = 0;
+uint16_t sdDataOffset = 0;
 
 struct sensorData sensor;
 struct currentWeatherHandle currentWeather;
@@ -193,9 +193,7 @@ void setup()
   time_t myTime;
   if (!rtc.isClockSet() && readNTP(&myTime))
   {
-    //settimeofday(tmPtr, NULL);
     rtc.setClock(myTime);
-    //gettimeofday(&tm, NULL);
     rf.setupCommunication();
     if (rf.sync(&syncStruct))
     {
@@ -246,38 +244,16 @@ void loop()
 
         if (touchArea(tsX, tsY, 267, 60, 267, 290))
         {
-          display.setFont(DISPLAY_FONT);
-          gui.printAlignText("Indoor stuff", 400, 300, ALIGMENT_CENTER);
-          display.partialUpdate();
+          modeSelect = 3;
+          gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+          display.display();
         }
 
         if (touchArea(tsX, tsY, 534, 60, 267, 290))
         {
-          struct measruementHandle *sdData;
-          int16_t enteries = rf.getNumberOfEntries(1635339675, COMMUNICATION_OUTDDOR);
-          sdData = (struct measruementHandle *)ps_malloc(sizeof(measruementHandle) * enteries);
-          if (sdData != NULL && enteries > 0)
-          {
-            if (!rf.getOutdoorDataFromSD(1635339675, enteries, sdData))
-            {
-              Serial.println("Reading SD Data error");
-            }
-            for (int i = 0; i < enteries; i++)
-            {
-              Serial.println(sdData[i].tempSHT, 2);
-            }
-            if (enteries > 10) enteries = 10;
-            display.clearDisplay();
-            display.setFont();
-            display.setTextSize(2);
-            gui.drawGraph(130, 200, 600, 300, &(sdData[0].epoch), &(sdData[0].tempSHT), enteries, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
-            display.display();
-            free(sdData);
-          }
-          else
-          {
-            Serial.println("Dynamic allocation error!!!");
-          }
+          modeSelect = 2;
+          gui.drawOutdoorData(&rf, rtc.getClock(), 0, &sdDataOffset);
+          display.display();
         }
         break;
 
@@ -288,6 +264,7 @@ void loop()
           modeSelect = 0;
           selectedDay = 0;
           selectedGraph = 0;
+          sdDataDayOffset = 0;
         }
 
         if (touchArea(tsX, tsY, 0, 0, 75, 75) && selectedDay > 0)
@@ -373,6 +350,46 @@ void loop()
           display.partialUpdate();
         }
         break;
+
+        case 2:
+        case 3:
+          if (touchArea(tsX, tsY, 0, 0, 75, 75))
+          {
+            sdDataDayOffset++;
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            display.partialUpdate();
+          }
+          if (touchArea(tsX, tsY, 730, 0, 70, 50) && sdDataDayOffset != 0)
+          {
+            sdDataDayOffset--;
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            display.partialUpdate();
+          }
+          if (touchArea(tsX, tsY, 10, 570, 30, 30))
+          {
+            sdDataDayOffset = 0;
+            modeSelect = 0;
+            sdDataOffset = 0;
+            gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
+          }
+          if (touchArea(tsX, tsY, 90, 140, 30, 30))
+          {
+            if (sdDataOffset != 0) sdDataOffset--;
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            display.partialUpdate();
+
+          }
+          if (touchArea(tsX, tsY, 680, 140, 30, 30))
+          {
+            sdDataOffset++;
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            display.partialUpdate();
+          }
+          break;
     }
   }
 
@@ -418,6 +435,8 @@ void loop()
     modeSelect = 0;
     selectedDay = 0;
     selectedGraph = 0;
+    sdDataDayOffset = 0;
+    sdDataOffset = 0;
     tNow = epochToHuman(rtc.getClock());
     gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
   }

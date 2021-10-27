@@ -265,6 +265,109 @@ void GUI::drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xDa
   free(_intArray);
 }
 
+void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset)
+{
+  struct measruementHandle *sdData;
+  time_t _newTime = _epoch - (86400 * _dayOffset);
+  char _tempStr[60];
+
+   _ink->clearDisplay();
+  // Draw arrows for selecting the day
+  _ink->fillTriangle(50, 10, 50, 40, 20, 25, BLACK);
+  if (_dayOffset != 0) _ink->fillTriangle(750, 10, 750, 40, 780, 25, BLACK);
+  // Draw back arrow
+  _ink->fillTriangle(10, 580, 30, 570, 30, 590, BLACK);
+  // Draw top line
+  _ink->fillRect(4, 50, 792, 3, BLACK);
+  // Draw text
+  _ink->setFont(DISPLAY_FONT);
+  _ink->setTextSize(1);
+  _ink->setCursor(200, 35);
+  sprintf(_tempStr, "Vanjska jed. %d.%02d.%04d, %s", epochToHuman(_newTime).tm_mday, epochToHuman(_newTime).tm_mon, epochToHuman(_newTime).tm_year + 1900, DOW[epochToHuman(_newTime).tm_wday]);
+  _ink->setCursor(200, 35);
+  _ink->print(_tempStr);
+  // Draw bottom line and icons
+
+  _ink->setFont();
+  _ink->setTextSize(2);
+  int16_t _enteries = _comm->getNumberOfEntries(_newTime, COMMUNICATION_OUTDDOR);
+  if (_enteries == -1 || _enteries < 1)
+  {
+    printAlignText("Nema podataka", 400, 300, ALIGMENT_CENTER);
+  }
+  else if (_enteries > 1)
+  {
+    // If data has been shifted so far, get it back!
+    if (((*_dataOffset) + 8) > _enteries) (*_dataOffset) = _enteries - 8;
+    // Read all the data from SD
+    sdData = (struct measruementHandle *)ps_malloc(sizeof(measruementHandle) * _enteries);
+    if (sdData != NULL && _enteries > 0)
+    {
+      if (!_comm->getOutdoorDataFromSD(_newTime, _enteries, sdData))
+      {
+        Serial.println("Reading SD Data error");
+      }
+      drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].tempSHT), 8, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+      // Draw arrows for selecting visible data span
+      if ((*_dataOffset) != 0) _ink->fillTriangle(120, 140, 120, 170, 90, 155, BLACK);
+      if (((*_dataOffset) + 8) < _enteries) _ink->fillTriangle(680, 140, 680, 170, 710, 155, BLACK);
+      free(sdData);
+    }
+  }
+}
+
+void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset)
+{
+  struct sensorData *sdData;
+  time_t _newTime = _epoch - (86400 * _dayOffset);
+  char _tempStr[60];
+
+   _ink->clearDisplay();
+  // Draw arrows for selecting the day
+  _ink->fillTriangle(50, 10, 50, 40, 20, 25, BLACK);
+  if (_dayOffset != 0) _ink->fillTriangle(750, 10, 750, 40, 780, 25, BLACK);
+  // Draw back arrow
+  _ink->fillTriangle(10, 580, 30, 570, 30, 590, BLACK);
+  // Draw top line
+  _ink->fillRect(4, 50, 792, 3, BLACK);
+  // Draw text
+  _ink->setFont(DISPLAY_FONT);
+  _ink->setTextSize(1);
+  _ink->setCursor(200, 35);
+  sprintf(_tempStr, "Unutrasnja jed. %d.%02d.%04d, %s", epochToHuman(_newTime).tm_mday, epochToHuman(_newTime).tm_mon, epochToHuman(_newTime).tm_year + 1900, DOW[epochToHuman(_newTime).tm_wday]);
+  _ink->setCursor(200, 35);
+  _ink->print(_tempStr);
+  // Draw bottom line and icons
+
+  _ink->setFont();
+  _ink->setTextSize(2);
+  int16_t _enteries = _comm->getNumberOfEntries(_newTime, COMMUNICATION_INDDOR);
+  if (_enteries == -1 || _enteries < 1)
+  {
+    printAlignText("Nema podataka", 400, 300, ALIGMENT_CENTER);
+  }
+  else if (_enteries > 1)
+  {
+    Serial.println(_enteries, DEC);
+    // If data has been shifted so far, get it back!
+    if (((*_dataOffset) + 8) > _enteries) (*_dataOffset) = _enteries - 8;
+    // Read all the data from SD
+    sdData = (struct sensorData *)ps_malloc(sizeof(sensorData) * _enteries);
+    if (sdData != NULL && _enteries > 0)
+    {
+      if (!_comm->getIndoorDataFromSD(_newTime, _enteries, sdData))
+      {
+        Serial.println("Reading SD Data error");
+      }
+      drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].timeStamp), &(sdData[(*_dataOffset)].temp), 8, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+      // Draw arrows for selecting visible data span
+      if ((*_dataOffset) != 0) _ink->fillTriangle(120, 140, 120, 170, 90, 155, BLACK);
+      if (((*_dataOffset) + 8) < _enteries) _ink->fillTriangle(680, 140, 680, 170, 710, 155, BLACK);
+      free(sdData);
+    }
+  }
+}
+
 uint8_t* GUI::weatherIcon(uint8_t i)
 {
   switch (i)

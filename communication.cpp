@@ -190,7 +190,6 @@ int16_t communication::getNumberOfEntries(time_t _epoch, uint8_t _indoor)
   SdFile _file;
   SdFat *_sd = _ink->getSdFat();
   struct tm *_t;
-  time_t _rtcEpoch;
   char _temp[50];
 
   // Init SD card (just in case)
@@ -199,8 +198,7 @@ int16_t communication::getNumberOfEntries(time_t _epoch, uint8_t _indoor)
   // Go to root
   _sd->chdir();
 
-  _rtcEpoch = _rtc->getClock();
-  _t = localtime((const time_t*)&_rtcEpoch);
+  _t = localtime((const time_t*)&_epoch);
   sprintf(_temp, _folderPath, _indoor == COMMUNICATION_INDDOR ? _folderIndoor : _folderOutdoor, _t->tm_year + 1900);
   if (!_sd->chdir(_temp)) return -2;
 
@@ -219,7 +217,7 @@ int16_t communication::getNumberOfEntries(time_t _epoch, uint8_t _indoor)
 
 uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct measruementHandle* _d)
 {
-  char _temp[50];
+  char _temp[100];
   SdFile _file;
   SdFat *_sd = _ink->getSdFat();
 
@@ -269,6 +267,67 @@ uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct me
       int _dummy;
       sscanf(_oneLine, _outdoorDataEntrySD, &_dummy, &(_d[i].epoch), &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].tempSHT), &(_d[i].tempSoil), &(_d[i].humidity), &( _d[i].pressure), &(_d[i].light), &_uv, &( _d[i].solarJ), &(_d[i].solarW), &(_d[i].windSpeed), &(_d[i].windDir), &(_d[i].rain));
       _d[i].uv = _uv * 100;
+    }
+    free(_dataStartPos);
+    free(_oneLine);
+    _file.close();
+    return 1;
+  }
+  return 0;
+}
+
+uint8_t communication::getIndoorDataFromSD(time_t _epoch, int16_t _n, struct sensorData* _d)
+{
+  char _temp[100];
+  SdFile _file;
+  SdFat *_sd = _ink->getSdFat();
+
+  // Init SD card (just in case)
+  if (!_sd->begin(15, SD_SCK_MHZ(25))) return 0;
+
+  // Go to root
+  _sd->chdir();
+
+  // Go inside outdoor directory
+  getFolderPath(_temp, _epoch, COMMUNICATION_INDDOR);
+  if (!_sd->chdir(_temp)) return 0;
+
+  // Open specific file
+  getFileNameFromEpoch(_temp, _epoch);
+  if (_file.open(_temp, O_RDONLY))
+  {
+    int _entries = 0;
+    uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 1));
+    char *_oneLine = (char*)ps_malloc(sizeof(char) * (600));
+    if (_dataStartPos == NULL || _oneLine == NULL) return 0;
+
+    // Find start of each new line
+    _file.rewind();
+    while (_file.available() && _entries < (_n + 1))
+    {
+      if (_file.read() == '\n')
+      {
+        _dataStartPos[_entries] = _file.curPosition();
+        _entries++;
+      }
+    }
+
+    if (_entries < _n) _n = _entries;
+    
+    for (int i = 0; i < _n; i++)
+    {
+      // Copy each line in buffer
+      uint32_t _size = _dataStartPos[i + 1] - _dataStartPos[i] - 2;
+      _file.seekSet(_dataStartPos[i]);
+      _file.read(_oneLine, _size);
+      _oneLine[_size] = 0;
+      _oneLine[_size + 1] = '\r';
+      _oneLine[_size + 2] = '\n';
+      int _dummy;
+      // For some weird reason it wont copy directly in _d[i].timeStamp, so we have to use additional variable
+      int test;
+      Serial.println(sscanf(_oneLine, _indoorDataEntrySD, &_dummy, &test, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].temp), &(_d[i].humidity), &(_d[i].pressure), &(_d[i].eco2), &(_d[i].tvoc), &(_d[i].rawH2), &(_d[i].rawEthanol)), DEC);
+      _d[i].timeStamp = test;
     }
     free(_dataStartPos);
     free(_oneLine);
