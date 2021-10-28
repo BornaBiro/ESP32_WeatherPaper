@@ -21,6 +21,7 @@
 // Sensor includes
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
+#include <Adafruit_SGP30.h>
 
 // Other includes
 #include "sys/time.h"
@@ -50,16 +51,17 @@ GUI gui;
 pcf85063 rtc;
 communication rf;
 RF24_Inkplate radio(14, 15, 2000000);
+Adafruit_SGP30 sgp;
 
 // Consts for hour, minutes, seconds, ...
 struct tm tNow;
 time_t timeToWake;
 int timeOffset;
 
-//const char ssid[] = "Biro_WLAN";
-//const char pass[] = "CaVex250_H2sH11";
-const char ssid[] = "Optima-322d0e";
-const char pass[] = "OPTIMA2649004925";
+const char ssid[] = "Biro_WLAN";
+const char pass[] = "CaVex250_H2sH11";
+//const char ssid[] = "Optima-322d0e";
+//const char pass[] = "OPTIMA2649004925";
 
 uint8_t modeSelect = 0;
 uint8_t forcedRef = 0;
@@ -86,6 +88,7 @@ void setup()
   Serial.begin(115200);
   Wire.begin();
   display.begin();
+  EEPROM.begin(64);
 
   // Set output mode of MCP INT pin
   display.setIntOutputInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 1, 0, 0, 1);
@@ -105,6 +108,10 @@ void setup()
   // Set RTC INT PIN
   display.pinModeInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 12, INPUT_PULLUP);
   display.setIntPinInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 12, FALLING);
+
+  // Set 3V3SW pin as output
+  display.pinModeInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, OUTPUT);
+  display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, LOW);
 
   // Clear all INT flags on MCP
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
@@ -200,10 +207,28 @@ void setup()
       display.clearDisplay();
       display.print("sync succ!");
       display.display();
+      timeToWake = (time_t)syncStruct.sendEpoch;
+      rtc.setAlarm(timeToWake);
     }
-    timeToWake = (time_t)syncStruct.sendEpoch;
-    rtc.setAlarm(timeToWake);
+    else
+    {
+      timeToWake = rf.newWakeupTime(rtc.getClock());
+      rtc.setAlarm(timeToWake);
+      EEPROM.put(0, &timeToWake);
+      EEPROM.commit();
+    }
   }
+  // Check if the time to wake has already passed. If it is, calculate new
+  EEPROM.get(0, timeToWake);
+  if ((rtc.getClock() >= timeToWake) || (abs(timeToWake - rtc.getClock()) > (60 * WAKEUP_INTERVAL)))
+  {
+    timeToWake = rf.newWakeupTime(rtc.getClock());
+    rtc.setAlarm(timeToWake);
+    EEPROM.put(0, &timeToWake);
+    EEPROM.commit();
+  }
+  Serial.println(timeToWake, DEC);
+  Serial.println(rtc.getClock());
   tNow = epochToHuman(rtc.getClock());
   gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
   esp_wifi_stop();
@@ -218,11 +243,8 @@ void loop()
   esp_light_sleep_start();
   uint16_t intPins = display.getINTInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
-  Serial.println("Woken up");
-  Serial.flush();
   if ((intPins & (1 << 13)) && ts.available(&tsX, &tsY))
   {
-    Serial.println("TS detected");
     switch (modeSelect)
     {
       case 0:
@@ -242,17 +264,17 @@ void loop()
           forcedRef = 1;
         }
 
-        if (touchArea(tsX, tsY, 267, 60, 267, 290))
-        {
-          modeSelect = 3;
-          gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
-          display.display();
-        }
-
         if (touchArea(tsX, tsY, 534, 60, 267, 290))
         {
           modeSelect = 2;
-          gui.drawOutdoorData(&rf, rtc.getClock(), 0, &sdDataOffset);
+          gui.drawOutdoorData(&rf, rtc.getClock(), 0, &sdDataOffset, selectedGraph);
+          display.display();
+        }
+
+        if (touchArea(tsX, tsY, 267, 60, 267, 290))
+        {
+          modeSelect = 3;
+          gui.drawIndoorData(&rf, rtc.getClock(), 0, &sdDataOffset, selectedGraph);
           display.display();
         }
         break;
@@ -356,15 +378,15 @@ void loop()
           if (touchArea(tsX, tsY, 0, 0, 75, 75))
           {
             sdDataDayOffset++;
-            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
-            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
           }
           if (touchArea(tsX, tsY, 730, 0, 70, 50) && sdDataDayOffset != 0)
           {
             sdDataDayOffset--;
-            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
-            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
           }
           if (touchArea(tsX, tsY, 10, 570, 30, 30))
@@ -372,21 +394,35 @@ void loop()
             sdDataDayOffset = 0;
             modeSelect = 0;
             sdDataOffset = 0;
+            selectedGraph = 0;
             gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
           }
           if (touchArea(tsX, tsY, 90, 140, 30, 30))
           {
             if (sdDataOffset != 0) sdDataOffset--;
-            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
-            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
 
           }
           if (touchArea(tsX, tsY, 680, 140, 30, 30))
           {
             sdDataOffset++;
-            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
-            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset);
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            display.partialUpdate();
+          }
+          if (touchArea(tsX, tsY, 50, 550, 750, 150) && modeSelect == 2)
+          {
+            selectedGraph = (tsX - 50) / 70;
+            gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            display.partialUpdate();
+          }
+
+          if(touchArea(tsX, tsY, 50, 490, 750, 150) && modeSelect == 3)
+          {
+            selectedGraph = (tsX - 50) / 70;
+            gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
           }
           break;
@@ -395,25 +431,36 @@ void loop()
 
   if ((rtc.checkAlarmFlag() && (intPins & (1 << 12))) || forcedRef)
   {
+    uint8_t _rxOk = 0;
+    time_t _sgpTimeout = rtc.getClock() + 16;
+    uint16_t eco2Base, tvocBase;
+
+    // Power up and init C02 sensor
+    display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, HIGH);
+    delay(10);
+    sgp.begin();
+    EEPROM.get(8, eco2Base);
+    EEPROM.get(10, tvocBase);
+    sgp.setIAQBaseline(eco2Base, tvocBase);
     display.setFont(DISPLAY_FONT_SMALL);
     display.setTextSize(1);
     display.setCursor(550, 46);
     display.print("Dohvacanje novih podataka");
     display.partialUpdate();
-    readSensor(&sensor);
     if (!forcedRef)
     {
+      wifiCounter++;
       rtc.clearAlarm();
-      uint8_t _rxOk = rf.getData(&syncStruct, &outdoorData);
+      _rxOk = rf.getData(&syncStruct, &outdoorData);
       timeToWake = (time_t)syncStruct.sendEpoch;
       rtc.setAlarm(timeToWake);
-      if (_rxOk) rf.saveDataToSD(&sensor, &outdoorData);
+      EEPROM.put(0, &timeToWake);
+      EEPROM.commit();
     }
-    wifiCounter++;
 
-    if (wifiCounter > 4 || forcedRef)
+    // Get new weather data from the internet every 30 minutes
+    if (wifiCounter > 2 || forcedRef)
     {
-      Serial.println("New weateher req");
       wifiCounter = 0;
       esp_wifi_start();
       WiFi.mode(WIFI_STA);
@@ -431,6 +478,23 @@ void loop()
       esp_wifi_stop();
       btStop();
     }
+
+    while(rtc.getClock() < _sgpTimeout)
+    {
+        display.print('.');
+        display.partialUpdate();
+        delay(1000);
+    }
+    sgp.IAQmeasure();
+    sgp.IAQmeasureRaw();
+  	readSensor(&sensor);
+    // Save new baseline and power down sensor
+    sgp.getIAQBaseline(&eco2Base, &tvocBase);
+    display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, LOW);
+    EEPROM.put(8, eco2Base);
+    EEPROM.put(10, tvocBase);
+    EEPROM.commit();
+    if (!forcedRef) rf.saveDataToSD(&sensor, _rxOk?&outdoorData:NULL);
     forcedRef = 0;
     modeSelect = 0;
     selectedDay = 0;
@@ -461,11 +525,16 @@ void writeInfoBox(int y, char* c)
 
 void readSensor(struct sensorData *_s)
 {
-  _s->timeStamp = (uint32_t)rtc.getClock();
+  _s->epoch = (uint32_t)rtc.getClock();
   bme.takeForcedMeasurement();
   _s->temp = bme.readTemperature();
   _s->humidity = bme.readHumidity();
   _s->pressure = bme.readPressure() / 100.0F;
+  _s->eco2 = sgp.eCO2;
+  _s->tvoc = sgp.TVOC;
+  _s->rawH2 = sgp.rawH2;
+  _s->rawEthanol = sgp.rawEthanol;
+  _s->battery = ts.getBatteryVoltage();
 }
 
 bool readNTP(time_t *_epoch)

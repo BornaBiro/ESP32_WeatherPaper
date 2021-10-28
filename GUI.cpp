@@ -10,7 +10,7 @@ void GUI::init(Inkplate *_inkPtr)
   _ink = _inkPtr;
 }
 
-void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct measruementHandle *_d1, struct tm *_time)
+void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle *_current, struct forecastListHandle *_forecastList, struct forecastDisplayHandle *_displayForecast, struct oneCallApiHandle *_one, struct measruementHandle *_d, struct tm *_time)
 {
     char tmp[50];
     _ink->clearDisplay();
@@ -81,22 +81,16 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
         _ink->drawBitmap(xOffset - 105, 420, weatherIcon(atoi(_displayForecast[i - _forecastList->shiftDay].weatherIcon)), 50, 50, BLACK);
         _ink->setTextSize(1);
         _ink->setFont(DISPLAY_FONT_SMALL);
-        //printStringCenter(_displayForecast[i - _forecastList->shiftDay].weatherDesc, xOffset - 80, 482);
         printAlignText(_displayForecast[i - _forecastList->shiftDay].weatherDesc, xOffset - 80, 482, ALIGMENT_CENTERTOP);
         sprintf(tmp, "%d.%d", epochToHuman(_forecastList->forecast[_forecastList->startElement[i - _forecastList->shiftDay]].timestamp).tm_mday, epochToHuman(_forecastList->forecast[_forecastList->startElement[i -_forecastList->shiftDay]].timestamp).tm_mon + 1);
-        //printStringCenter(tmp, xOffset - 80, 415);
         printAlignText(tmp, xOffset - 80, 415, ALIGMENT_CENTERTOP);
         sprintf(tmp, "%d hPa   %d %%", _displayForecast[i - _forecastList->shiftDay].avgPressure, _displayForecast[i - _forecastList->shiftDay].avgHumidity);
-        //printStringCenter(tmp, xOffset - 80, 575);
         printAlignText(tmp, xOffset - 80, 575, ALIGMENT_CENTERTOP);
         sprintf(tmp, "%.1f / %.1f m/s   %s", _displayForecast[i - _forecastList->shiftDay].avgWindSpeed, _displayForecast[i - _forecastList->shiftDay].maxWindSpeed, oznakeVjetar[int((_displayForecast[i - _forecastList->shiftDay].avgWindDir / 22.5) + .5) % 16]);
-        //printStringCenter(tmp, xOffset - 80, 588);
         printAlignText(tmp, xOffset - 80, 588, ALIGMENT_CENTERTOP);
         _ink->setFont(DISPLAY_FONT);
         sprintf(tmp, "%d | %d", _displayForecast[i - _forecastList->shiftDay].maxTemp, _displayForecast[i - _forecastList->shiftDay].minTemp);
-        //printStringCenter(tmp, xOffset - 80, 520);
         printAlignText(tmp, xOffset - 80, 520, ALIGMENT_CENTERTOP);
-        //printStringCenter((char*)DOW[epochToHuman(_forecastList->forecast[_forecastList->startElement[i - _forecastList->shiftDay]].timestamp).tm_wday], xOffset - 80, 400);
         printAlignText((char*)DOW[epochToHuman(_forecastList->forecast[_forecastList->startElement[i - _forecastList->shiftDay]].timestamp).tm_wday], xOffset - 80, 400, ALIGMENT_CENTERTOP);
     }
 
@@ -107,9 +101,9 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
 
     _ink->setFont(DISPLAY_FONT);
     _ink->setCursor(600, 150);
-    _ink->print(_d1->tempSHT, 1);
+    _ink->print(_d->tempSHT, 1);
     _ink->setCursor(600, 250);
-    _ink->print(_d1->humidity, 1);
+    _ink->print(_d->humidity, 1);
     _ink->display();
 }
 
@@ -265,11 +259,12 @@ void GUI::drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xDa
   free(_intArray);
 }
 
-void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset)
+void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset, uint8_t _graph)
 {
   struct measruementHandle *sdData;
   time_t _newTime = _epoch - (86400 * _dayOffset);
   char _tempStr[60];
+  uint8_t _showNData = 8;
 
    _ink->clearDisplay();
   // Draw arrows for selecting the day
@@ -287,7 +282,11 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   _ink->setCursor(200, 35);
   _ink->print(_tempStr);
   // Draw bottom line and icons
-
+  const uint8_t *iconList[] = {iconTemp, iconTlak, iconVlaga, iconVjetar, iconWindDir, iconLight, iconUV, iconSolar, iconSolar, iconRainDrop, iconBattery};
+  for (int i = 0; i < 11; i++)
+  {
+    _ink->drawBitmap((i * 70) + 50, 550, iconList[i], 40, 40, BLACK);
+  }
   _ink->setFont();
   _ink->setTextSize(2);
   int16_t _enteries = _comm->getNumberOfEntries(_newTime, COMMUNICATION_OUTDDOR);
@@ -298,29 +297,87 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   else if (_enteries > 1)
   {
     // If data has been shifted so far, get it back!
-    if (((*_dataOffset) + 8) > _enteries) (*_dataOffset) = _enteries - 8;
+    //if (((*_dataOffset) + 8) > _enteries) (*_dataOffset) = _enteries - 8;
     // Read all the data from SD
     sdData = (struct measruementHandle *)ps_malloc(sizeof(measruementHandle) * _enteries);
     if (sdData != NULL && _enteries > 0)
     {
       if (!_comm->getOutdoorDataFromSD(_newTime, _enteries, sdData))
       {
-        Serial.println("Reading SD Data error");
+        _ink->setFont(DISPLAY_FONT);
+        _ink->setTextSize(1);
+        printAlignText("Pogreska s SD karticom", 400, 300, ALIGMENT_CENTER);
       }
-      drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].tempSHT), 8, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+      if (_enteries <= 8)
+      {
+        _showNData = _enteries;
+        *_dataOffset = 0;
+      }
+      else
+      {
+        if ((*_dataOffset) + 8 > _enteries) (*_dataOffset) = _enteries - 8;
+      }
       // Draw arrows for selecting visible data span
       if ((*_dataOffset) != 0) _ink->fillTriangle(120, 140, 120, 170, 90, 155, BLACK);
       if (((*_dataOffset) + 8) < _enteries) _ink->fillTriangle(680, 140, 680, 170, 710, 155, BLACK);
+      switch (_graph)
+      {
+        case 0:
+          printAlignText("Temperatura zraka [C]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].tempSHT), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+          break;
+        case 1:
+          printAlignText("Tlak zraka [hPa]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].pressure), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+          break;
+        case 2:
+          printAlignText("Relat. vlaznost zraka [%]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].humidity), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE, 0, 100);
+          break;
+        case 3:
+          printAlignText("Brzina vjetra [m/s]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].windSpeed), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+          break;
+        case 4:
+          printAlignText("Smjer vjetra [stupnjevi]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].windDir), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_INT16_T, GRAPHSTYLE_DOT, 0, 360);
+          break;
+        case 5:
+          printAlignText("Kolicina svjetlosti [lux]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].light), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+          break;
+        case 6:
+          printAlignText("UV zracenje [UV index]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].uv), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_COLUMN, 0, 12);
+          break;
+        case 7:
+          printAlignText("Kolicina suncevog zracenja [J/cm2]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].solarJ), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_COLUMN);
+          break;
+        case 8:
+          printAlignText("Kolicina suncevog zracenja [W/m2]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].solarW), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_COLUMN);
+          break;
+        case 9:
+          printAlignText("Kolicina padalina [mm]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].rain), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_COLUMN);
+          break;
+        case 10:
+          printAlignText("Baterija [V]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].battery), _showNData, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_COLUMN, 0, 4.4);
+          break;
+      }
       free(sdData);
     }
   }
 }
 
-void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset)
+void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset, uint8_t _graph)
 {
   struct sensorData *sdData;
   time_t _newTime = _epoch - (86400 * _dayOffset);
   char _tempStr[60];
+  uint8_t _showNData = 8;
 
    _ink->clearDisplay();
   // Draw arrows for selecting the day
@@ -338,6 +395,11 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
   _ink->setCursor(200, 35);
   _ink->print(_tempStr);
   // Draw bottom line and icons
+  const uint8_t *iconList[] = {iconTemp, iconTlak, iconVlaga, iconCo2, iconTvoc, iconH2, iconEth, iconBattery};
+  for (int i = 0; i < 8; i++)
+  {
+    _ink->drawBitmap((i * 70) + 50, 550, iconList[i], 40, 40, BLACK);
+  }
 
   _ink->setFont();
   _ink->setTextSize(2);
@@ -348,7 +410,6 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
   }
   else if (_enteries > 1)
   {
-    Serial.println(_enteries, DEC);
     // If data has been shifted so far, get it back!
     if (((*_dataOffset) + 8) > _enteries) (*_dataOffset) = _enteries - 8;
     // Read all the data from SD
@@ -357,12 +418,57 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
     {
       if (!_comm->getIndoorDataFromSD(_newTime, _enteries, sdData))
       {
-        Serial.println("Reading SD Data error");
+        _ink->setFont(DISPLAY_FONT);
+        _ink->setTextSize(1);
+        printAlignText("Pogreska s SD karticom", 400, 300, ALIGMENT_CENTER);
       }
-      drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].timeStamp), &(sdData[(*_dataOffset)].temp), 8, sizeof(struct measruementHandle), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+      if (_enteries <= 8)
+      {
+        _showNData = _enteries;
+        *_dataOffset = 0;
+      }
+      else
+      {
+        if ((*_dataOffset) + 8 > _enteries) (*_dataOffset) = _enteries - 8;
+      }
       // Draw arrows for selecting visible data span
       if ((*_dataOffset) != 0) _ink->fillTriangle(120, 140, 120, 170, 90, 155, BLACK);
       if (((*_dataOffset) + 8) < _enteries) _ink->fillTriangle(680, 140, 680, 170, 710, 155, BLACK);
+      switch (_graph)
+      {
+        case 0:
+          printAlignText("Temperatura zraka [C]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].temp), _showNData, sizeof(struct sensorData), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+          break;
+        case 1:
+          printAlignText("Tlak zraka [hPa]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].pressure), _showNData, sizeof(struct sensorData), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE);
+          break;
+        case 2:
+          printAlignText("Relat. vlaznost zraka [%]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].humidity), _showNData, sizeof(struct sensorData), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE, 0, 100);
+          break;
+        case 3:
+          printAlignText("eCO2 [ppm]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].eco2), _showNData, sizeof(struct sensorData), 10, DATATYPE_UINT16_T, GRAPHSTYLE_LINE);
+          break;
+        case 4:
+          printAlignText("TVOC [ppb]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].tvoc), _showNData, sizeof(struct sensorData), 10, DATATYPE_UINT16_T, GRAPHSTYLE_LINE);
+          break;
+        case 5:
+          printAlignText("Vodik - H2 [RAW]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].rawH2), _showNData, sizeof(struct sensorData), 10, DATATYPE_UINT16_T, GRAPHSTYLE_LINE);
+          break;
+        case 6:
+          printAlignText("Etanol [RAW]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].rawEthanol), _showNData, sizeof(struct sensorData), 10, DATATYPE_UINT16_T, GRAPHSTYLE_LINE);
+          break;
+        case 7:
+          printAlignText("Baterija [V]", 400, 195, ALIGMENT_CENTERBOT);
+          drawGraph(130, 200, 600, 300, &(sdData[(*_dataOffset)].epoch), &(sdData[(*_dataOffset)].battery), _showNData, sizeof(struct sensorData), 10, DATATYPE_FLOAT, GRAPHSTYLE_LINE, 0, 4.4);
+          break;
+      }
       free(sdData);
     }
   }

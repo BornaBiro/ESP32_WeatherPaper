@@ -9,15 +9,15 @@
 
 // Struct used for stroring data from sensor (indoor unit)
 struct sensorData {
-  uint16_t eco2 = 0;
-  uint16_t tvoc = 0;
-  uint16_t rawH2 = 0;
-  uint16_t rawEthanol = 0;
-  uint32_t timeStamp = 0;
-  float battery = 0;
-  float temp = 0;
-  float humidity = 0;
-  float pressure = 0;
+  uint16_t eco2;
+  uint16_t tvoc;
+  uint16_t rawH2;
+  uint16_t rawEthanol;
+  uint32_t epoch;
+  float battery;
+  float temp ;
+  float humidity;
+  float pressure;
 };
 
 // Struct for current weather conditions
@@ -109,7 +109,7 @@ struct syncStructHandle {
 
 struct measruementHandle
 {
-    uint16_t uv;
+    float uv;
     int16_t windDir;
     float tempSHT;
     float tempSoil;

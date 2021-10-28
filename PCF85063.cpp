@@ -44,10 +44,10 @@ void pcf85063::RTCinit(uint8_t resetRTC)
 
   // Clear interrupts and set clockout frequency (1.024kHz)
   regData = PCF85063_CTRL2_MASK;
-   writeRegisters(PCF85063_CTRL1, &regData, 1);
+   writeRegisters(PCF85063_CTRL2, &regData, 1);
 
-  // Start RTC normally
-  regData = 0b00000000;
+  // Start RTC normally with internal cap set to 12.5 pF
+  regData = 0b00000001;
   writeRegisters(PCF85063_CTRL1, &regData, 1);
 }
 

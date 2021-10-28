@@ -100,6 +100,23 @@ uint16_t TSC2046E_Inkplate::getP(uint16_t _x)
     return (uint16_t)(_xPlateRes * (_x / 4096.0) * (((_z2 * 1.0) / _z1) - 1));
 }
 
+float TSC2046E_Inkplate::getBatteryVoltage()
+{
+    _ink->digitalWriteInternal(MCP23017_INT_ADDR, _ink->mcpRegsInt, _csPin, LOW);
+    // 2MHz clock -> 500kHz/16 = 31.250kHz Sample Rate
+    _mySpi->beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE0));
+    // 0b1, 010 - VBAT, 0 - 12 bits,  1 - single ended meas., 00 - low power between meas.
+    _mySpi->transfer(0b10100111);
+    delayMicroseconds(50);
+    int _batt = ((_mySpi->transfer(0x00) << 8 | _mySpi->transfer(0x00)) >> 3);
+    _mySpi->endTransaction();
+    _ink->digitalWriteInternal(MCP23017_INT_ADDR, _ink->mcpRegsInt, _csPin, HIGH);
+    // Make one dummy reading just to put device into low power mode.
+    getX();
+
+    return (_batt / 4095.0 * 2.5 * 4);
+}
+
 uint8_t TSC2046E_Inkplate::available(int *_x, int *_y, int *_p)
 {
     if (_ink->digitalReadInternal(MCP23017_INT_ADDR, _ink->mcpRegsInt, _irqPin)) return 0;

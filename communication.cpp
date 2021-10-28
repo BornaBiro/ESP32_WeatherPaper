@@ -90,7 +90,7 @@ uint8_t communication::getData(struct syncStructHandle *_s, struct measruementHa
         _h->pressure = _d1.pressure;
         _h->tempSHT = _d1.tempSHT;
         _h->tempSoil = _d1.tempSoil;
-        _h->uv = _d1.uv;
+        _h->uv = _d1.uv / 100.0;
         _h->windDir = _d1.windDir;
         _h->windSpeed = _d1.windSpeed;
         dataRx |= 1;
@@ -125,35 +125,34 @@ uint8_t communication::saveDataToSD(struct sensorData *_s, struct measruementHan
   struct tm *_t;
   time_t _rtcEpoch;
   if (!_sd->begin(15, SD_SCK_MHZ(25))) return 0;
-  _sd->chdir();
-
-  _rtcEpoch = _rtc->getClock();
-  getFolderPath(_tempStr, _rtcEpoch, COMMUNICATION_OUTDDOR);
-  Serial.print("mkdir:");
-  Serial.println(_tempStr);
-  _sd->mkdir(_tempStr, true);
-  _sd->chdir(_tempStr);
-
-  // Create header on start of the file
-  getFileNameFromEpoch(_tempStr, _rtcEpoch);
-  Serial.print("file:");
-  Serial.println(_tempStr);
-  if (!_file.exists(_tempStr))
+  if (_d != NULL)
   {
-    _file.open(_tempStr, O_RDWR | O_CREAT);
-    _file.println(_outdoorDataHeader);
-    _file.close();
-  }
-  if (_file.open(_tempStr, O_RDWR | O_AT_END))
-  {
+    _sd->chdir();
+
     _rtcEpoch = _rtc->getClock();
-    _t = localtime((time_t*) & (_rtcEpoch));
-    _file.timestamp(T_ACCESS | T_CREATE | T_WRITE, _t->tm_year + 1900, _t->tm_mon + 1, _t->tm_mday, _t->tm_hour, _t->tm_min, _t->tm_sec);
-    _rtcEpoch = (time_t)(_d->epoch);
-    _t = localtime((const time_t*) & (_rtcEpoch));
-    sprintf(_tempStr, _outdoorDataEntry, 0, _d->epoch, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900, _t->tm_hour, _t->tm_min, _t->tm_sec, _d->battery, _d->tempSHT, _d->tempSoil, _d->humidity, _d->pressure, _d->light, _d->uv / 100.0, _d->solarJ, _d->solarW, _d->windSpeed, _d->windDir, _d->rain);
-    _file.println(_tempStr);
-    _file.close();
+    getFolderPath(_tempStr, _rtcEpoch, COMMUNICATION_OUTDDOR);
+    _sd->mkdir(_tempStr, true);
+    _sd->chdir(_tempStr);
+
+    // Create header on start of the file
+    getFileNameFromEpoch(_tempStr, _rtcEpoch);
+    if (!_file.exists(_tempStr))
+    {
+      _file.open(_tempStr, O_RDWR | O_CREAT);
+      _file.println(_outdoorDataHeader);
+      _file.close();
+    }
+    if (_file.open(_tempStr, O_RDWR | O_AT_END))
+    {
+      _rtcEpoch = _rtc->getClock();
+      _t = localtime((time_t*) & (_rtcEpoch));
+      _file.timestamp(T_ACCESS | T_CREATE | T_WRITE, _t->tm_year + 1900, _t->tm_mon + 1, _t->tm_mday, _t->tm_hour, _t->tm_min, _t->tm_sec);
+      _rtcEpoch = (time_t)(_d->epoch);
+      _t = localtime((const time_t*) & (_rtcEpoch));
+      sprintf(_tempStr, _outdoorDataEntry, 0, _d->epoch, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900, _t->tm_hour, _t->tm_min, _t->tm_sec, _d->battery, _d->tempSHT, _d->tempSoil, _d->humidity, _d->pressure, _d->light, _d->uv / 100.0, _d->solarJ, _d->solarW, _d->windSpeed, _d->windDir, _d->rain);
+      _file.println(_tempStr);
+      _file.close();
+    }
   }
 
   // Now store data from indoor unit
@@ -175,9 +174,9 @@ uint8_t communication::saveDataToSD(struct sensorData *_s, struct measruementHan
     _rtcEpoch = _rtc->getClock();
     _t = localtime((time_t*) & (_rtcEpoch));
     _file.timestamp(T_ACCESS | T_CREATE | T_WRITE, _t->tm_year + 1900, _t->tm_mon + 1, _t->tm_mday, _t->tm_hour, _t->tm_min, _t->tm_sec);
-    _rtcEpoch = (time_t)(_s->timeStamp);
+    _rtcEpoch = (time_t)(_s->epoch);
     _t = localtime((const time_t*) & (_rtcEpoch));
-    sprintf(_tempStr, _indoorDataEntry, 0, _s->timeStamp, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900, _t->tm_hour, _t->tm_min, _t->tm_sec, _s->battery, _s->temp, _s->humidity, _s->pressure, _s->eco2, _s->tvoc, _s->rawH2, _s->rawEthanol);
+    sprintf(_tempStr, _indoorDataEntry, 0, _s->epoch, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900, _t->tm_hour, _t->tm_min, _t->tm_sec, _s->battery, _s->temp, _s->humidity, _s->pressure, _s->eco2, _s->tvoc, _s->rawH2, _s->rawEthanol);
     _file.println(_tempStr);
     _file.close();
   }
@@ -215,6 +214,67 @@ int16_t communication::getNumberOfEntries(time_t _epoch, uint8_t _indoor)
   return _n - 1;
 }
 
+uint8_t communication::getIndoorDataFromSD(time_t _epoch, int16_t _n, struct sensorData* _d)
+{
+  char _temp[100];
+  SdFile _file;
+  SdFat *_sd = _ink->getSdFat();
+
+  // Init SD card (just in case)
+  if (!_sd->begin(15, SD_SCK_MHZ(25))) return 0;
+
+  // Go to root
+  _sd->chdir();
+
+  // Go inside indoor directory
+  getFolderPath(_temp, _epoch, COMMUNICATION_INDDOR);
+  if (!_sd->chdir(_temp)) return 0;
+
+  // Open specific file
+  getFileNameFromEpoch(_temp, _epoch);
+  if (_file.open(_temp, O_RDONLY))
+  {
+    int _entries = 0;
+    uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 2));
+    char *_oneLine = (char*)ps_malloc(sizeof(char) * (600));
+    if (_dataStartPos == NULL || _oneLine == NULL) return 0;
+
+    // Find start of each new line
+    _file.rewind();
+    while (_file.available() && _entries < (_n + 1))
+    {
+      if (_file.read() == '\n')
+      {
+        _dataStartPos[_entries] = _file.curPosition();
+        _entries++;
+      }
+    }
+
+    if (_entries < _n) _n = _entries;
+    
+    for (int i = 0; i < _n; i++)
+    {
+      // Copy each line in buffer
+      uint32_t _size = _dataStartPos[i + 1] - _dataStartPos[i] - 2;
+      _file.seekSet(_dataStartPos[i]);
+      _file.read(_oneLine, _size);
+      _oneLine[_size] = 0;
+      _oneLine[_size + 1] = '\r';
+      _oneLine[_size + 2] = '\n';
+      int _dummy;
+      // For some weird reason it wont copy directly in _d[i].timeStamp, so we have to use additional variable
+      int _tempEpoch;
+      sscanf(_oneLine, _indoorDataEntrySD, &_dummy, &_tempEpoch, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].temp), &(_d[i].humidity), &(_d[i].pressure), &(_d[i].eco2), &(_d[i].tvoc), &(_d[i].rawH2), &(_d[i].rawEthanol));
+      _d[i].epoch = _tempEpoch;
+    }
+    free(_dataStartPos);
+    free(_oneLine);
+    _file.close();
+    return 1;
+  }
+  return 0;
+}
+
 uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct measruementHandle* _d)
 {
   char _temp[100];
@@ -236,7 +296,7 @@ uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct me
   if (_file.open(_temp, O_RDONLY))
   {
     int _entries = 0;
-    uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 1));
+    uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 2));
     char *_oneLine = (char*)ps_malloc(sizeof(char) * (600));
     if (_dataStartPos == NULL || _oneLine == NULL) return 0;
 
@@ -267,67 +327,6 @@ uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct me
       int _dummy;
       sscanf(_oneLine, _outdoorDataEntrySD, &_dummy, &(_d[i].epoch), &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].tempSHT), &(_d[i].tempSoil), &(_d[i].humidity), &( _d[i].pressure), &(_d[i].light), &_uv, &( _d[i].solarJ), &(_d[i].solarW), &(_d[i].windSpeed), &(_d[i].windDir), &(_d[i].rain));
       _d[i].uv = _uv * 100;
-    }
-    free(_dataStartPos);
-    free(_oneLine);
-    _file.close();
-    return 1;
-  }
-  return 0;
-}
-
-uint8_t communication::getIndoorDataFromSD(time_t _epoch, int16_t _n, struct sensorData* _d)
-{
-  char _temp[100];
-  SdFile _file;
-  SdFat *_sd = _ink->getSdFat();
-
-  // Init SD card (just in case)
-  if (!_sd->begin(15, SD_SCK_MHZ(25))) return 0;
-
-  // Go to root
-  _sd->chdir();
-
-  // Go inside outdoor directory
-  getFolderPath(_temp, _epoch, COMMUNICATION_INDDOR);
-  if (!_sd->chdir(_temp)) return 0;
-
-  // Open specific file
-  getFileNameFromEpoch(_temp, _epoch);
-  if (_file.open(_temp, O_RDONLY))
-  {
-    int _entries = 0;
-    uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 1));
-    char *_oneLine = (char*)ps_malloc(sizeof(char) * (600));
-    if (_dataStartPos == NULL || _oneLine == NULL) return 0;
-
-    // Find start of each new line
-    _file.rewind();
-    while (_file.available() && _entries < (_n + 1))
-    {
-      if (_file.read() == '\n')
-      {
-        _dataStartPos[_entries] = _file.curPosition();
-        _entries++;
-      }
-    }
-
-    if (_entries < _n) _n = _entries;
-    
-    for (int i = 0; i < _n; i++)
-    {
-      // Copy each line in buffer
-      uint32_t _size = _dataStartPos[i + 1] - _dataStartPos[i] - 2;
-      _file.seekSet(_dataStartPos[i]);
-      _file.read(_oneLine, _size);
-      _oneLine[_size] = 0;
-      _oneLine[_size + 1] = '\r';
-      _oneLine[_size + 2] = '\n';
-      int _dummy;
-      // For some weird reason it wont copy directly in _d[i].timeStamp, so we have to use additional variable
-      int test;
-      Serial.println(sscanf(_oneLine, _indoorDataEntrySD, &_dummy, &test, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].temp), &(_d[i].humidity), &(_d[i].pressure), &(_d[i].eco2), &(_d[i].tvoc), &(_d[i].rawH2), &(_d[i].rawEthanol)), DEC);
-      _d[i].timeStamp = test;
     }
     free(_dataStartPos);
     free(_oneLine);
