@@ -201,6 +201,7 @@ void setup()
   if (!rtc.isClockSet() && readNTP(&myTime))
   {
     rtc.setClock(myTime);
+    radio.powerUp();
     rf.setupCommunication();
     if (rf.sync(&syncStruct))
     {
@@ -255,7 +256,53 @@ void loop()
           modeSelect = 1;
         }
 
-        if (touchArea(tsX, tsY, 770, 0, 30, 30))
+        // NTP Sync button
+        if (touchArea(tsX, tsY, 660, 5, 40, 40))
+        {
+          time_t _myNewTime;
+          time_t _myNewAlarmTime;
+          uint8_t _wiFiRetry = 0;
+          writeInfoBox(350, "Sinkronizacija sata...");
+          display.partialUpdate();
+          if (readNTP(&_myNewTime))
+          {
+            WiFi.begin(ssid, pass);
+            while (WiFi.status() != WL_CONNECTED && _wiFiRetry < 15)
+            {
+              delay(1000);
+              _wiFiRetry++;
+            }
+            if(WiFi.status() == WL_CONNECTED)
+            {
+              rtc.setClock(_myNewTime);
+              _myNewAlarmTime = rf.newWakeupTime(_myNewTime);
+              rtc.setAlarm(_myNewAlarmTime);
+              EEPROM.put(0, _myNewAlarmTime);
+              EEPROM.commit();
+            }
+          }
+          esp_wifi_stop();
+          btStop();
+          gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
+        }
+
+        // Outdoor unit sync
+        if (touchArea(tsX, tsY, 710, 5, 40, 40))
+        {
+          radio.powerUp();
+          rf.setupCommunication();
+          uint8_t _myNewSync = rf.sync(&syncStruct);
+          if (_myNewSync)
+          {
+            rtc.setAlarm(syncStruct.sendEpoch);
+            EEPROM.put(0, (time_t)syncStruct.sendEpoch);
+            EEPROM.commit();
+          }
+          gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
+        }
+
+        // Forced data refresh button
+        if (touchArea(tsX, tsY, 760, 0, 40, 50))
         {
           display.setFont(DISPLAY_FONT);
           display.setCursor(610, 35);
@@ -444,7 +491,7 @@ void loop()
     sgp.setIAQBaseline(eco2Base, tvocBase);
     display.setFont(DISPLAY_FONT_SMALL);
     display.setTextSize(1);
-    display.setCursor(550, 46);
+    display.setCursor(5, 46);
     display.print("Dohvacanje novih podataka");
     display.partialUpdate();
     if (!forcedRef)
@@ -466,11 +513,9 @@ void loop()
       WiFi.mode(WIFI_STA);
       WiFi.begin(ssid, pass);
       int i = 0;
-      while (WiFi.status() != WL_CONNECTED)
+      while (WiFi.status() != WL_CONNECTED && (i < 15))
       {
         delay(1000);
-        i++;
-        if (i > 15) break;
         display.print('.');
         display.partialUpdate();
       }
@@ -544,6 +589,7 @@ bool readNTP(time_t *_epoch)
   const char* NTPServer = "hr.pool.ntp.org";
   uint16_t ntpPort = 123;
   uint8_t ntpPacket[48];
+  unsigned long _ntpTimeout;
 
   udp.begin(8888);
   if (!WiFi.hostByName(NTPServer, ntpIp)) return 0;
@@ -560,13 +606,16 @@ bool readNTP(time_t *_epoch)
   udp.beginPacket(ntpIp, 123);
   udp.write(ntpPacket, 48);
   udp.endPacket();
-  delay(1500);
-  if (udp.parsePacket())
+  _ntpTimeout = millis();
+  while ((unsigned long)(millis() - _ntpTimeout) < 5000)
   {
-    udp.read(ntpPacket, 48);
-    uint32_t unix = ntpPacket[40] << 24 | ntpPacket[41] << 16 | ntpPacket[42] << 8 | ntpPacket[43];
-    *_epoch = unix - 2208988800UL + currentWeather.timezone;
-    return true;
+    if (udp.parsePacket() >= 48)
+    {
+      udp.read(ntpPacket, 48);
+      uint32_t unix = ntpPacket[40] << 24 | ntpPacket[41] << 16 | ntpPacket[42] << 8 | ntpPacket[43];
+      *_epoch = unix - 2208988800UL + currentWeather.timezone;
+      return true;
+    }
   }
   return false;
 }

@@ -23,7 +23,9 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
     _ink->setCursor(1, 20);
     _ink->print(_current->city);
     _ink->setTextSize(1);
-    _ink->drawBitmap(770, 0, refIcon, 30, 30, BLACK);
+    _ink->drawBitmap(760, 10, refIcon, 30, 30, BLACK);
+    _ink->drawBitmap(710, 5, iconAntenna, 40, 40, BLACK);
+    _ink->drawBitmap(660, 5, iconNTPSync, 40, 40, BLACK);
 
     sprintf(tmp, "%1d:%02d %d/%d/%04d %3s", _time->tm_hour,  _time->tm_min,  _time->tm_mday,  _time->tm_mon + 1,  _time->tm_year + 1900, DOW[ _time->tm_wday]);
 
@@ -70,7 +72,7 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
     _ink->setCursor(350, 270);
     _ink->print(_sensor->temp, 1);
 
-    if (strlen(_one->alertEvent)) _ink->drawBitmap(720, 5, iconWarning, 40, 40, BLACK);
+    if (strlen(_one->alertEvent)) _ink->drawBitmap(610, 5, iconWarning, 40, 40, BLACK);
 
     int xOffset, xOffsetText;
     for (int i = 1; i < 6; i++) 
