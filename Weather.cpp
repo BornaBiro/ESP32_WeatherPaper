@@ -121,17 +121,12 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
           _d[i].maxTemp = _f->forecast[_f->startElement[i]].maxTemp;
           _d[i].minTemp = _f->forecast[_f->startElement[i]].minTemp;
           _d[i].maxWindSpeed = _f->forecast[_f->startElement[i]].windGust;
-          //Serial.print("Start element:");
-          //Serial.print(_f->startElement[i], DEC);
-          //Serial.print(" end element:");
-          //Serial.println(_f->startElement[i + 1], DEC);
           float eastWestVectSum = 0;
           float northSouthVectSum = 0;
           for (int j = _f->startElement[i]; j < _f->startElement[i + 1]; j++)
           {
             _d[i].avgPressure += _f->forecast[j].pressureGnd;
             _d[i].avgHumidity += _f->forecast[j].humidity;
-            //_d[i].avgWindSpeed += _f->forecast[j].windSpeed;
             eastWestVectSum += _f->forecast[j].windSpeed * sin(_f->forecast[j].windDir * PI / 180);
             northSouthVectSum += _f->forecast[j].windSpeed * cos(_f->forecast[j].windDir * PI / 180);
             if (_d[i].maxTemp < _f->forecast[j].maxTemp) _d[i].maxTemp = round(_f->forecast[j].maxTemp);
@@ -142,9 +137,6 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
               _d[i].weatherIcon = _f->forecast[j].weatherIcon;
               _d[i].weatherDesc = _f->forecast[j].weatherDesc;
             }
-            //Serial.print(i, DEC);
-            //Serial.print('/');
-            //Serial.println(j, DEC);
           }
           _d[i].avgPressure /= nElements;
           _d[i].avgHumidity /= nElements;
@@ -153,7 +145,6 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
           _d[i].avgWindSpeed = sqrt((eastWestVectSum * eastWestVectSum) + (northSouthVectSum * northSouthVectSum));
           _d[i].avgWindDir = atan2(eastWestVectSum, northSouthVectSum) * 180 / PI;
           _d[i].avgWindDir = (_d[i].avgWindDir >= 0 ? _d[i].avgWindDir : _d[i].avgWindDir + 360);
-          //_d[i].avgWindSpeed /= nElements;
         }
         _f->shiftDay = 1;
         if (_f->startElement[1] - _f->startElement[0] < 3) _f->shiftDay = 0;

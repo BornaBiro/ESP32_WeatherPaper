@@ -37,12 +37,12 @@ class communication
     const char *_folderIndoor = "Indoor";
     const char *_folderOutdoor = "Outdoor";
     const char *_filenameStr = "%02d_%02d_%04d.csv";
-    const char *_outdoorDataHeader = "No.;EPOCH;DATE[DD.MM.YYYY];TIME[HH:MM:SS];Battery[V];Temp[C];TempSoil[C];Humidity[%];Pressure[hPa];Light[lux];UV[index];Solar energy[J/cm^2];Solar Enegry[W/^2];Wind speed[m/s];Wind direction[deg];Rain[mm]";
-    const char *_outdoorDataEntry = "%d.;%ld;%02d.%02d.%04d;%02d:%02d:%02d;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%d;%.6f;";
-    const char *_outdoorDataEntrySD = "%d.;%ld;%d.%d.%d;%d:%d:%d;%f;%f;%f;%f;%f;%f;%f;%f;%f;%f;%d;%f;";
-    const char *_indoorDataHeader = "No.;EPOCH;DATE[DD.MM.YYYY];TIME[HH:MM:SS];Battery[V];Temp[C];Humidity[%];Pressure[hPa];eCO2[ppm];TVOC[ppb];RAW H2;RAW Ethanol";
-    const char *_indoorDataEntry = "%d.;%ld;%02d.%02d.%04d;%02d:%02d:%02d;%.6f;%.6f;%.6f;%.6f;%d;%d;%d;%d";
-    const char *_indoorDataEntrySD = "%d.;%ld;%d.%d.%d;%d:%d:%d;%f;%f;%f;%f;%d;%d;%d;%d";
+    const char *_outdoorDataHeader = "No.;EPOCH;DATE[DD.MM.YYYY.];TIME[HH:MM:SS];Battery[V];Temp[C];TempSoil[C];Humidity[%];Pressure[hPa];Light[lux];UV[index];Solar energy[J/cm^2];Solar Enegry[W/^2];Wind speed[m/s];Wind direction[deg];Rain[mm]";
+    const char *_outdoorDataEntry = "%d.;%ld;%02d.%02d.%04d.;%02d:%02d:%02d;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%.6f;%d;%.6f;";
+    const char *_outdoorDataEntrySD = "%d.;%ld;%d.%d.%d.;%d:%d:%d;%f;%f;%f;%f;%f;%f;%f;%f;%f;%f;%d;%f;";
+    const char *_indoorDataHeader = "No.;EPOCH;DATE[DD.MM.YYYY.];TIME[HH:MM:SS];Battery[V];Temp[C];Humidity[%];Pressure[hPa];eCO2[ppm];TVOC[ppb];RAW H2;RAW Ethanol";
+    const char *_indoorDataEntry = "%d.;%ld;%02d.%02d.%04d.;%02d:%02d:%02d;%.6f;%.6f;%.6f;%.6f;%d;%d;%d;%d";
+    const char *_indoorDataEntrySD = "%d.;%ld;%d.%d.%d.;%d:%d:%d;%f;%f;%f;%f;%d;%d;%d;%d";
     uint64_t addr[2] = {0x65646F4E31, 0x65646F4E32};
 };
 

@@ -95,6 +95,18 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
     _ink->setTextSize(2);
     printAlignText("Unutra", 400, 70, ALIGMENT_CENTERTOP);
     printAlignText("Vani", 667, 70, ALIGMENT_CENTERTOP);
+    _ink->setTextSize(1);
+    _ink->setCursor(540, 345);
+    _ink->print("Zadnji podatak: ");
+    if (_d->epoch != 0)
+    {
+      sprintf(tmp, "%d.%d.%04d %d:%02d", epochToHuman(_d->epoch).tm_mday, epochToHuman(_d->epoch).tm_mon + 1, epochToHuman(_d->epoch).tm_year + 1900, epochToHuman(_d->epoch).tm_hour, epochToHuman(_d->epoch).tm_min);
+      _ink->print(tmp);
+    }
+    else
+    {
+      _ink->print("[Nema podataka]");
+    }
 
     _ink->setFont(DISPLAY_FONT);
     _ink->setTextSize(1);
@@ -312,6 +324,12 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   uint8_t _showNData = 8;
 
    _ink->clearDisplay();
+
+  // Draw line that shows what kind of data is being displayed
+  _ink->fillRect(4, 540, 792, 3, BLACK);
+  _ink->fillRect((_graph * 70) + 35, 540, 70, 3, WHITE);
+  _ink->fillRect(0, 170, 800, 360, WHITE);
+
   // Draw arrows for selecting the day
   _ink->fillTriangle(50, 10, 50, 40, 20, 25, BLACK);
   if (_dayOffset != 0) _ink->fillTriangle(750, 10, 750, 40, 780, 25, BLACK);
@@ -335,7 +353,7 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   _ink->setFont();
   _ink->setTextSize(2);
   int16_t _enteries = _comm->getNumberOfEntries(_newTime, COMMUNICATION_OUTDDOR);
-  if (_enteries == -1 || _enteries < 1)
+  if (_enteries == -1 || _enteries <= 1)
   {
     printAlignText("Nema podataka", 400, 300, ALIGMENT_CENTER);
   }
@@ -363,6 +381,13 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
       // Draw arrows for selecting visible data span
       if ((*_dataOffset) != 0) _ink->fillTriangle(120, 140, 120, 170, 90, 155, BLACK);
       if (((*_dataOffset) + 8) < _enteries) _ink->fillTriangle(680, 140, 680, 170, 710, 155, BLACK);
+      
+      // Draw arrows for FF to the last measurement and for RW to the first measurement
+      _ink->fillTriangle(70, 140, 70, 170, 40, 155, BLACK);
+      _ink->fillRect(37, 140, 3, 30, BLACK);
+      _ink->fillTriangle(730, 140, 730, 170, 760, 155, BLACK);
+      _ink->fillRect(760, 140, 3, 30, BLACK);
+
       switch (_graph)
       {
         case 0:
@@ -423,6 +448,13 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
   uint8_t _showNData = 8;
 
    _ink->clearDisplay();
+
+  // Draw line that shows what kind of data is being displayed
+  if (_graph > 7) _graph = 7;
+  _ink->fillRect(4, 540, 792, 3, BLACK);
+  _ink->fillRect((_graph * 70) + 35, 540, 70, 3, WHITE);
+  _ink->fillRect(0, 170, 800, 360, WHITE);
+
   // Draw arrows for selecting the day
   _ink->fillTriangle(50, 10, 50, 40, 20, 25, BLACK);
   if (_dayOffset != 0) _ink->fillTriangle(750, 10, 750, 40, 780, 25, BLACK);
@@ -447,7 +479,7 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
   _ink->setFont();
   _ink->setTextSize(2);
   int16_t _enteries = _comm->getNumberOfEntries(_newTime, COMMUNICATION_INDDOR);
-  if (_enteries == -1 || _enteries < 1)
+  if (_enteries == -1 || _enteries <= 1)
   {
     printAlignText("Nema podataka", 400, 300, ALIGMENT_CENTER);
   }
@@ -476,6 +508,13 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
       // Draw arrows for selecting visible data span
       if ((*_dataOffset) != 0) _ink->fillTriangle(120, 140, 120, 170, 90, 155, BLACK);
       if (((*_dataOffset) + 8) < _enteries) _ink->fillTriangle(680, 140, 680, 170, 710, 155, BLACK);
+
+      // Draw arrows for FF to the last measurement and for RW to the first measurement
+      _ink->fillTriangle(70, 140, 70, 170, 40, 155, BLACK);
+      _ink->fillRect(37, 140, 3, 30, BLACK);
+      _ink->fillTriangle(730, 140, 730, 170, 760, 155, BLACK);
+      _ink->fillRect(760, 140, 3, 30, BLACK);
+
       switch (_graph)
       {
         case 0:

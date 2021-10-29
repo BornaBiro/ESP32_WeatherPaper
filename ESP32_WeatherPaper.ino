@@ -235,7 +235,7 @@ void setup()
     if (rf.sync(&syncStruct))
     {
       display.clearDisplay();
-      display.print("sync succ!");
+      display.print("Sinkronizacija uspjesna!");
       display.display();
       timeToWake = (time_t)syncStruct.sendEpoch;
       rtc.setAlarm(timeToWake);
@@ -245,6 +245,9 @@ void setup()
     else
     {
       // If sync failed, make a new wakeup time, just in case and save it to EEPROM
+      display.clearDisplay();
+      display.print("Sinkronizacija nije uspjela");
+      display.display();
       timeToWake = rf.newWakeupTime(rtc.getClock());
       rtc.setAlarm(timeToWake);
       EEPROM.put(0, timeToWake);
@@ -347,21 +350,24 @@ void loop()
           forcedRef = 1;
         }
 
+        // If it's pressed, show outdoor unit data by today
         if (touchArea(tsX, tsY, 534, 60, 267, 290))
         {
           modeSelect = 2;
-          gui.drawOutdoorData(&rf, rtc.getClock(), 0, &sdDataOffset, selectedGraph);
+          gui.drawOutdoorData(&rf, rtc.getClock(), 0, &sdDataOffset, selectedGraph, 1);
           display.display();
         }
 
+        // If it's pressed, show indoor unit data starting by today
         if (touchArea(tsX, tsY, 267, 60, 267, 290))
         {
           modeSelect = 3;
-          gui.drawIndoorData(&rf, rtc.getClock(), 0, &sdDataOffset, selectedGraph);
+          gui.drawIndoorData(&rf, rtc.getClock(), 0, &sdDataOffset, selectedGraph, 1);
           display.display();
         }
         break;
 
+      // Weather forecast
       case 1:
         if (touchArea(tsX, tsY, 10, 570, 30, 30))
         {
@@ -372,6 +378,7 @@ void loop()
           sdDataDayOffset = 0;
         }
 
+        // Go one day back (if it's possible)
         if (touchArea(tsX, tsY, 0, 0, 75, 75) && selectedDay > 0)
         {
           selectedDay--;
@@ -379,12 +386,15 @@ void loop()
           modeSelect = 1;
         }
 
+        // Go one day FW (if it's possible)
         if (touchArea(tsX, tsY, 730, 0, 70, 50) && selectedDay < 4)
         {
           selectedDay++;
           drawDays(selectedDay, false);
           modeSelect = 1;
         }
+
+        // Show graph for selected data
         if (touchArea(tsX, tsY, 50, 550, 700, 150))
         {
 
@@ -460,22 +470,27 @@ void loop()
         // Indoor and outdoor graphs
         case 2:
         case 3:
+          // Move one day back
           if (touchArea(tsX, tsY, 0, 0, 75, 75))
           {
             sdDataDayOffset++;
+            sdDataOffset = 0;
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            display.partialUpdate();
+          }
+          
+          // Move one day FW
+          if (touchArea(tsX, tsY, 730, 0, 70, 50) && sdDataDayOffset != 0)
+          {
+            sdDataDayOffset--;
+            sdDataOffset = 0;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
           }
 
-          if (touchArea(tsX, tsY, 730, 0, 70, 50) && sdDataDayOffset != 0)
-          {
-            sdDataDayOffset--;
-            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
-            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
-            display.partialUpdate();
-          }
-
+          // Get back to main screen
           if (touchArea(tsX, tsY, 10, 570, 30, 30))
           {
             sdDataDayOffset = 0;
@@ -485,20 +500,39 @@ void loop()
             gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
           }
 
+          // Move one dataset FW
           if (touchArea(tsX, tsY, 90, 140, 30, 30))
           {
             if (sdDataOffset != 0) sdDataOffset--;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
-
           }
 
+          // Move one dataset back
           if (touchArea(tsX, tsY, 680, 140, 30, 30))
           {
             sdDataOffset++;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            display.partialUpdate();
+          }
+
+          // Go back to the first measurement in day
+          if (touchArea(tsX, tsY, 40, 140, 30, 30))
+          {
+            sdDataOffset = 0;
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            display.partialUpdate();
+          }
+
+          // Go back to the last measurement in day
+          if (touchArea(tsX, tsY, 730, 140, 30, 30))
+          {
+            sdDataDayOffset = 0;
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
             display.partialUpdate();
           }
 

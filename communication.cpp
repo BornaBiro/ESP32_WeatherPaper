@@ -35,8 +35,9 @@ uint8_t communication::sync(struct syncStructHandle *_s)
   {
     _d->clearDisplay();
     _d->setCursor(0, 100);
-    _d->print("Timeout: ");
+    _d->print("Sinkronizacija u tijeku, preostalo vrjeme: ");
     _d->print(syncTimeout--, DEC);
+    _d->print('s');
     _d->partialUpdate(false, true);
     if (_myRf->available())
     {
