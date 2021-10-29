@@ -61,17 +61,6 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
     _ink->setCursor(175, 270);
     _ink->print(tmp);
 
-    _ink->drawBitmap(300, 70, indoorIcon, 40, 40, BLACK);
-    _ink->drawBitmap(300, 140, iconTlak, 40, 40, BLACK);
-    _ink->setCursor(350, 170);
-    _ink->print(_sensor->pressure, 1);
-    _ink->drawBitmap(300, 190, iconVlaga, 40, 40, BLACK);
-    _ink->setCursor(350, 220);
-    _ink->print(_sensor->humidity, 1);
-    _ink->drawBitmap(300, 240, iconTemp, 40, 40, BLACK);
-    _ink->setCursor(350, 270);
-    _ink->print(_sensor->temp, 1);
-
     if (strlen(_one->alertEvent)) _ink->drawBitmap(610, 5, iconWarning, 40, 40, BLACK);
 
     int xOffset, xOffsetText;
@@ -101,11 +90,65 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
         _ink->fillRect(267 * i, 60, 3, 290, BLACK);
     }
 
+    // Draw indoor and outdoor data
+    _ink->setFont(DISPLAY_FONT_SMALL);
+    _ink->setTextSize(2);
+    printAlignText("Unutra", 400, 70, ALIGMENT_CENTERTOP);
+    printAlignText("Vani", 667, 70, ALIGMENT_CENTERTOP);
+
     _ink->setFont(DISPLAY_FONT);
-    _ink->setCursor(600, 150);
+    _ink->setTextSize(1);
+
+    // Draw indoor data
+    _ink->drawBitmap(285, 90, iconTemp, 40, 40, BLACK);
+    _ink->setCursor(335, 120);
+    _ink->print(_sensor->temp, 1);
+    _ink->drawBitmap(415, 90, iconVlaga, 40, 40, BLACK);
+    _ink->setCursor(465, 120);
+    _ink->print(_sensor->humidity, 1);
+    _ink->drawBitmap(285, 140, iconTlak, 40, 40, BLACK);
+    _ink->setCursor(335, 170);
+    _ink->print(_sensor->pressure, 1);
+    _ink->print(" hPa");
+    _ink->drawBitmap(285, 190, iconCo2, 40, 40, BLACK);
+    _ink->setCursor(335, 220);
+    _ink->print(_sensor->eco2, DEC);
+    _ink->print(" ppm");
+    _ink->drawBitmap(285, 240, iconTvoc, 40, 40, BLACK);
+    _ink->setCursor(335, 270);
+    _ink->print(_sensor->tvoc, DEC);
+    _ink->print(" ppb");
+    _ink->drawBitmap(285, 290, iconBattery, 40, 40, BLACK);
+    _ink->setCursor(335, 320);
+    _ink->print(_sensor->battery, 2);
+    _ink->print(" V");
+
+    // Draw outdoor data
+    _ink->drawBitmap(550, 90, iconTemp, 40, 40, BLACK);
+    _ink->setCursor(600, 120);
     _ink->print(_d->tempSHT, 1);
-    _ink->setCursor(600, 250);
+    _ink->drawBitmap(680, 90, iconVlaga, 40, 40, BLACK);
+    _ink->setCursor(730, 120);
     _ink->print(_d->humidity, 1);
+    _ink->drawBitmap(550, 140, iconTlak, 40, 40, BLACK);
+    _ink->setCursor(600, 170);
+    _ink->print(_d->pressure, 1);
+    _ink->print(" hPa");
+    _ink->drawBitmap(550, 190, iconVjetar, 40, 40, BLACK);
+    _ink->setCursor(600, 220);
+    _ink->print(_d->windSpeed, 1);
+    _ink->print(" m/s | ");
+    _ink->print(oznakeVjetar[int((_d->windDir / 22.5) + .5) % 16]);
+    _ink->drawBitmap(550, 240, iconRainDrop, 40, 40, BLACK);
+    _ink->setCursor(600, 270);
+    _ink->print(_d->rain, 1);
+    _ink->print(" mm");
+    _ink->drawBitmap(550, 290, iconUV, 40, 40, BLACK);
+    _ink->setCursor(600, 320);
+    _ink->print(_d->uv, 1);
+    _ink->drawBitmap(680, 290, iconBattery, 40, 40, BLACK);
+    _ink->setCursor(730, 320);
+    _ink->print(_d->battery, 2);
     _ink->display();
 }
 
@@ -261,7 +304,7 @@ void GUI::drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xDa
   free(_intArray);
 }
 
-void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset, uint8_t _graph)
+void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset, uint8_t _graph, uint8_t _fw)
 {
   struct measruementHandle *sdData;
   time_t _newTime = _epoch - (86400 * _dayOffset);
@@ -298,9 +341,6 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   }
   else if (_enteries > 1)
   {
-    // If data has been shifted so far, get it back!
-    //if (((*_dataOffset) + 8) > _enteries) (*_dataOffset) = _enteries - 8;
-    // Read all the data from SD
     sdData = (struct measruementHandle *)ps_malloc(sizeof(measruementHandle) * _enteries);
     if (sdData != NULL && _enteries > 0)
     {
@@ -310,6 +350,7 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
         _ink->setTextSize(1);
         printAlignText("Pogreska s SD karticom", 400, 300, ALIGMENT_CENTER);
       }
+      if (_fw) (*_dataOffset) = _enteries - 8;
       if (_enteries <= 8)
       {
         _showNData = _enteries;
@@ -374,7 +415,7 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   }
 }
 
-void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset, uint8_t _graph)
+void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffset, uint16_t *_dataOffset, uint8_t _graph, uint8_t _fw)
 {
   struct sensorData *sdData;
   time_t _newTime = _epoch - (86400 * _dayOffset);
@@ -412,8 +453,6 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
   }
   else if (_enteries > 1)
   {
-    // If data has been shifted so far, get it back!
-    if (((*_dataOffset) + 8) > _enteries) (*_dataOffset) = _enteries - 8;
     // Read all the data from SD
     sdData = (struct sensorData *)ps_malloc(sizeof(sensorData) * _enteries);
     if (sdData != NULL && _enteries > 0)
@@ -424,6 +463,7 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
         _ink->setTextSize(1);
         printAlignText("Pogreska s SD karticom", 400, 300, ALIGMENT_CENTER);
       }
+      if (_fw) (*_dataOffset) = _enteries - 8;
       if (_enteries <= 8)
       {
         _showNData = _enteries;

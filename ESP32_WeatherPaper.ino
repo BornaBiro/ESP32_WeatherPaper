@@ -81,10 +81,12 @@ struct measruementHandle outdoorData;
 
 void setup()
 {
+  // Varibles for storing status of each module while init
   uint8_t sdError = 0;
   uint8_t bmeError = 0;
   uint8_t radioError = 0;
 
+  // Init System libraries
   Serial.begin(115200);
   Wire.begin();
   display.begin();
@@ -116,32 +118,30 @@ void setup()
   // Clear all INT flags on MCP
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
 
+  // Init GUI communication and RTC library
   gui.init(&display);
   rf.init(&radio, &display, &rtc);
   rtc.RTCinit();
 
+  // Get the SPI object from Inkplate library
   mySpi = display.getSPIptr();
   mySpi->begin(14, 12, 13, 15);
+
+  // Init touchscreen controller
   ts.begin(mySpi, &display, 10, 13);
   ts.calibrate(800, 3420, 3553, 317, 0, 799, 0, 599);
 
+  // Init all the modules
   radioError = radio.begin(mySpi, &display);
   bmeError = bme.begin(0x76);
   sdError = display.sdCardInit();
 
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  WiFi.setHostname("WeatherPaper");
-  bme.setSampling(Adafruit_BME280::MODE_FORCED,
-                  Adafruit_BME280::SAMPLING_X16, // temperature
-                  Adafruit_BME280::SAMPLING_X16, // pressure
-                  Adafruit_BME280::SAMPLING_X16, // humidity
-                  Adafruit_BME280::FILTER_X16   );
   display.setTextWrap(false);
   display.setFont(DISPLAY_FONT);
   display.setTextColor(BLACK, WHITE);
   display.setCursor(0, 24);
 
+  // Show is there any error with init of sensors
   if (!(sdError && bmeError && radioError))
   {
     display.print("Pogreška s ");
@@ -166,6 +166,20 @@ void setup()
     while (1);
   }
 
+  // Change WiFi name
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  WiFi.setHostname("WeatherPaper");
+
+  // Setup a temperatue, humidity and pressure sensor
+  bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                  Adafruit_BME280::SAMPLING_X16, // temperature
+                  Adafruit_BME280::SAMPLING_X16, // pressure
+                  Adafruit_BME280::SAMPLING_X16, // humidity
+                  Adafruit_BME280::FILTER_X16   );
+
+  // Try to connect to WiFi
+  uint8_t wiFiRetry = 30;
   int n = WiFi.scanNetworks();
   if (n > 6) n = 6;
   display.clearDisplay();
@@ -186,17 +200,32 @@ void setup()
   display.print(ssid);
   display.partialUpdate(false, true);
   WiFi.begin(ssid, pass);
-  while (WiFi.status() != WL_CONNECTED)
+  while (WiFi.status() != WL_CONNECTED && wiFiRetry > 0)
   {
     delay(1000);
     display.print('.');
     display.partialUpdate(false, true);
+    wiFiRetry--;
   }
-  display.print("spojeno! Pricekajte...");
-  display.partialUpdate();
+  if(WiFi.status() == WL_CONNECTED)
+  {
+    display.print("spojeno! Pricekajte...");
+    display.partialUpdate();
+  }
+  else
+  {
+    display.print("Spajanje neuspjesno!");
+    display.display();
+    esp_deep_sleep_start();
+    while (1);
+  }
 
+  // Read data from sensors and from the Internet
   readSensor(&sensor);
   updateWeatherData();
+
+  // Check if the time is set and if it not set it by connecting to NTP serer
+  // After that try to sync with outdoor unit and set new wakeup time and save it in EEPROM
   time_t myTime;
   if (!rtc.isClockSet() && readNTP(&myTime))
   {
@@ -210,26 +239,27 @@ void setup()
       display.display();
       timeToWake = (time_t)syncStruct.sendEpoch;
       rtc.setAlarm(timeToWake);
+      EEPROM.put(0, timeToWake);
+      EEPROM.commit();
     }
     else
     {
+      // If sync failed, make a new wakeup time, just in case and save it to EEPROM
       timeToWake = rf.newWakeupTime(rtc.getClock());
       rtc.setAlarm(timeToWake);
-      EEPROM.put(0, &timeToWake);
+      EEPROM.put(0, timeToWake);
       EEPROM.commit();
     }
   }
-  // Check if the time to wake has already passed. If it is, calculate new
+  // Check if the time to wake has already passed. If it is, calculate new wakeup time
   EEPROM.get(0, timeToWake);
   if ((rtc.getClock() >= timeToWake) || (abs(timeToWake - rtc.getClock()) > (60 * WAKEUP_INTERVAL)))
   {
     timeToWake = rf.newWakeupTime(rtc.getClock());
     rtc.setAlarm(timeToWake);
-    EEPROM.put(0, &timeToWake);
+    EEPROM.put(0, timeToWake);
     EEPROM.commit();
   }
-  Serial.println(timeToWake, DEC);
-  Serial.println(rtc.getClock());
   tNow = epochToHuman(rtc.getClock());
   gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
   esp_wifi_stop();
@@ -240,15 +270,21 @@ void loop()
 {
   int tsX, tsY;
   rtc_gpio_isolate(GPIO_NUM_12);
+  // Make ESP32 GPIO34 INT pin that wakes up ESP32
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34, 1);
   esp_light_sleep_start();
+
+  // If ESP32 has woken up, see what caused wake up and clear the INT flags in MCP23017
   uint16_t intPins = display.getINTInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
+
+  // If the touchscreen woke ESP32 up, get the X and Y of touch and check what has been pressed
   if ((intPins & (1 << 13)) && ts.available(&tsX, &tsY))
   {
     switch (modeSelect)
     {
       case 0:
+        // Touched one of weather forecast days
         if (touchArea(tsX, tsY, 0, 410, 800, 190))
         {
           selectedDay = tsX / 160;
@@ -357,6 +393,7 @@ void loop()
           display.partialUpdate();
         }
 
+        // Show pop-up "window" with data of selected day and time
         if (touchArea(tsX, tsY, 0, 70, 800, 70))
         {
           int selectedElement = tsX / 100;
@@ -420,6 +457,7 @@ void loop()
         }
         break;
 
+        // Indoor and outdoor graphs
         case 2:
         case 3:
           if (touchArea(tsX, tsY, 0, 0, 75, 75))
@@ -429,13 +467,15 @@ void loop()
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
           }
+
           if (touchArea(tsX, tsY, 730, 0, 70, 50) && sdDataDayOffset != 0)
           {
             sdDataDayOffset--;
-            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
+            if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
+            if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
             display.partialUpdate();
           }
+
           if (touchArea(tsX, tsY, 10, 570, 30, 30))
           {
             sdDataDayOffset = 0;
@@ -444,6 +484,7 @@ void loop()
             selectedGraph = 0;
             gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
           }
+
           if (touchArea(tsX, tsY, 90, 140, 30, 30))
           {
             if (sdDataOffset != 0) sdDataOffset--;
@@ -452,6 +493,7 @@ void loop()
             display.partialUpdate();
 
           }
+
           if (touchArea(tsX, tsY, 680, 140, 30, 30))
           {
             sdDataOffset++;
@@ -459,6 +501,7 @@ void loop()
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             display.partialUpdate();
           }
+
           if (touchArea(tsX, tsY, 50, 550, 750, 150) && modeSelect == 2)
           {
             selectedGraph = (tsX - 50) / 70;
@@ -494,6 +537,8 @@ void loop()
     display.setCursor(5, 46);
     display.print("Dohvacanje novih podataka");
     display.partialUpdate();
+
+    // If it's not the user forced update of data, that means is RTC and it's time to get the data from outdook unit
     if (!forcedRef)
     {
       wifiCounter++;
@@ -501,7 +546,7 @@ void loop()
       _rxOk = rf.getData(&syncStruct, &outdoorData);
       timeToWake = (time_t)syncStruct.sendEpoch;
       rtc.setAlarm(timeToWake);
-      EEPROM.put(0, &timeToWake);
+      EEPROM.put(0, timeToWake);
       EEPROM.commit();
     }
 
@@ -524,6 +569,7 @@ void loop()
       btStop();
     }
 
+    // CO2 sensor must work at leasts 15 seconds in order to get any data
     while(rtc.getClock() < _sgpTimeout)
     {
         display.print('.');
