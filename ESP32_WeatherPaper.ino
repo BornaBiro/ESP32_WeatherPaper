@@ -281,6 +281,14 @@ void loop()
   uint16_t intPins = display.getINTInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
 
+  time_t eepromWake;
+  EEPROM.get(0, eepromWake);
+  Serial.println(rtc.getClock(), DEC);
+  Serial.println(timeToWake, DEC);
+  Serial.println(eepromWake, DEC);
+  Serial.println("--------------");
+  Serial.flush();
+
   // If the touchscreen woke ESP32 up, get the X and Y of touch and check what has been pressed
   if ((intPins & (1 << 13)) && ts.available(&tsX, &tsY))
   {
@@ -303,21 +311,26 @@ void loop()
           uint8_t _wiFiRetry = 0;
           writeInfoBox(350, "Sinkronizacija sata...");
           display.partialUpdate();
-          if (readNTP(&_myNewTime))
+          esp_wifi_start();
+          WiFi.mode(WIFI_STA);
+          WiFi.begin(ssid, pass);
+          while (WiFi.status() != WL_CONNECTED && _wiFiRetry < 15)
           {
-            WiFi.begin(ssid, pass);
-            while (WiFi.status() != WL_CONNECTED && _wiFiRetry < 15)
+            delay(1000);
+            _wiFiRetry++;
+          }
+          if(WiFi.status() == WL_CONNECTED)
+          {
+            if (readNTP(&_myNewTime))
             {
-              delay(1000);
-              _wiFiRetry++;
-            }
-            if(WiFi.status() == WL_CONNECTED)
-            {
+              writeInfoBox(350, "Sinkronizacija sata ok!");
+              display.partialUpdate();
               rtc.setClock(_myNewTime);
               _myNewAlarmTime = rf.newWakeupTime(_myNewTime);
               rtc.setAlarm(_myNewAlarmTime);
               EEPROM.put(0, _myNewAlarmTime);
               EEPROM.commit();
+              delay(1000);
             }
           }
           esp_wifi_stop();
@@ -477,7 +490,7 @@ void loop()
             sdDataOffset = 0;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
           
           // Move one day FW
@@ -487,7 +500,7 @@ void loop()
             sdDataOffset = 0;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
 
           // Get back to main screen
@@ -506,7 +519,7 @@ void loop()
             if (sdDataOffset != 0) sdDataOffset--;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
 
           // Move one dataset back
@@ -515,7 +528,7 @@ void loop()
             sdDataOffset++;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
 
           // Go back to the first measurement in day
@@ -524,7 +537,7 @@ void loop()
             sdDataOffset = 0;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
 
           // Go back to the last measurement in day
@@ -533,21 +546,21 @@ void loop()
             sdDataDayOffset = 0;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
 
           if (touchArea(tsX, tsY, 50, 550, 750, 150) && modeSelect == 2)
           {
             selectedGraph = (tsX - 50) / 70;
             gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
 
           if(touchArea(tsX, tsY, 50, 490, 750, 150) && modeSelect == 3)
           {
             selectedGraph = (tsX - 50) / 70;
             gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph);
-            display.partialUpdate();
+            display.partialUpdate(false, true);
           }
           break;
     }
