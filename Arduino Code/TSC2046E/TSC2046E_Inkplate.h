@@ -16,6 +16,7 @@ class TSC2046E_Inkplate
     uint16_t getZ1();
     uint16_t getZ2();
     uint16_t getP(uint16_t _x);
+    float getBatteryVoltage();
     uint8_t available(int *_x, int *_y, int *_p = NULL);
     
   private:
