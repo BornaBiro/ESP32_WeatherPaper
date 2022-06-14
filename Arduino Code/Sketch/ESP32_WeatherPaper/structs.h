@@ -7,6 +7,7 @@
 #define SYNC_HEADER     0b00110101
 #define DATA1_HEADER    0b00010001
 #define DATA2_HEADER    0b00100010
+#define PARTIAL_COUNTER 6
 
 // Struct used for stroring data from sensor (indoor unit)
 struct sensorData {

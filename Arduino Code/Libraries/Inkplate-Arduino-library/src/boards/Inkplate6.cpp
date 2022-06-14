@@ -280,31 +280,8 @@ void Inkplate::display1b(bool leaveOn)
         vscan_end();
     }
     delayMicroseconds(230);
-
-    vscan_start();
-    for (int i = 0; i < E_INK_HEIGHT; ++i)
-    {
-        dram = *(DMemoryNew + _pos);
-        data = 0;
-        _send = pinLUT[data];
-        hscan_start(_send);
-        data = 0;
-        GPIO.out_w1ts = (_send) | CL;
-        GPIO.out_w1tc = DATA | CL;
-        for (int j = 0; j < ((E_INK_WIDTH / 8) - 1); ++j)
-        {
-            GPIO.out_w1ts = (_send) | CL;
-            GPIO.out_w1tc = DATA | CL;
-            GPIO.out_w1ts = (_send) | CL;
-            GPIO.out_w1tc = DATA | CL;
-        }
-        GPIO.out_w1ts = (_send) | CL;
-        GPIO.out_w1tc = DATA | CL;
-        vscan_end();
-    }
-    delayMicroseconds(230);
-
-    vscan_start();
+    clean(2, 1);
+    clean(3, 1);
 
     if (!leaveOn)
         einkOff();
@@ -457,14 +434,11 @@ uint32_t Inkplate::partialUpdate(bool _forced, bool leaveOn)
         }
         delayMicroseconds(230);
     }
-    clean(2, 2);
-    clean(3, 1);
-    vscan_start();
+    clean(2, 1);
+    memcpy(DMemoryNew, _partial, E_INK_WIDTH * E_INK_HEIGHT / 8);
 
     if (!leaveOn)
         einkOff();
-
-    memcpy(DMemoryNew, _partial, E_INK_WIDTH * E_INK_HEIGHT / 8);
 
     return changeCount;
 }

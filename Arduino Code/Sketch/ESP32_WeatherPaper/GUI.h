@@ -61,6 +61,7 @@ class GUI
     double map2(double x, double in_min, double in_max, double out_min, double out_max);
     private:
     Inkplate *_ink;
+    uint8_t _partialCounter = 0;
 };
 
 #endif

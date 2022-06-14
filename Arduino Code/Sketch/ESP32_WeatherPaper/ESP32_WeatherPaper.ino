@@ -581,7 +581,7 @@ void loop()
     display.setTextSize(1);
     display.setCursor(5, 46);
     display.print("Dohvacanje podataka...");
-    display.partialUpdate(false, true);
+    display.partialUpdate(false, false);
 
     // If it's not the user forced update of data, that means is RTC and it's time to get the data from outdook unit
     if (!forcedRef)
@@ -613,6 +613,7 @@ void loop()
         display.partialUpdate(false, true);
         i++;
       }
+      display.einkOff();
       if (WiFi.status() == WL_CONNECTED) updateWeatherData();
       esp_wifi_stop();
       btStop();
@@ -620,12 +621,8 @@ void loop()
       readCO2sensor(&co2Timeout);
     }
 
-    display.print("citanje senzora...");
-    display.partialUpdate();
-
   	readSensor(&sensor);
     if (!forcedRef) rf.saveDataToSD(&sensor, _rxOk?&outdoorData:NULL);
-    forcedRef = 0;
     modeSelect = 0;
     selectedDay = 0;
     selectedGraph = 0;
@@ -633,6 +630,7 @@ void loop()
     sdDataOffset = 0;
     tNow = epochToHuman(rtc.getClock());
     gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
+    forcedRef = 0;
   }
 }
 
