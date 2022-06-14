@@ -1,0 +1,54 @@
+name: Compile Examples
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - board:
+              fqbn: Inkplate_Boards:esp32:Inkplate6
+            additional-sketch-paths: |
+              - examples/Inkplate6
+          - board:
+              fqbn: Inkplate_Boards:esp32:Inkplate10
+            additional-sketch-paths: |
+              - examples/Inkplate10
+          - board:
+              fqbn: Inkplate_Boards:esp32:Inkplate5
+            additional-sketch-paths: |
+              - examples/Inkplate5
+          - board:
+              fqbn: Inkplate_Boards:esp32:Inkplate6plus
+            additional-sketch-paths: |
+              - examples/Inkplate6PLUS
+          - board:
+              fqbn: Inkplate_Boards:esp32:Inkplate6COLOR
+            additional-sketch-paths: |
+              - examples/Inkplate6COLOR
+          - board:
+              fqbn: Inkplate_Boards:esp32:Inkplate2
+            additional-sketch-paths: |
+              - examples/Inkplate2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install ESP32 platform dependencies
+        run: pip3 install pyserial
+      - name: Compile examples
+        uses: arduino/compile-sketches@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          platforms: |
+            - source-url: https://github.com/e-radionicacom/Dasduino-Board-Definitions-for-Arduino-IDE/raw/master/package_Dasduino_Boards_index.json
+              name: Inkplate_Boards:esp32
+
+          fqbn: ${{ matrix.board.fqbn }}
+          libraries: |
+            - source-path: ./
+            - name: "Adafruit BME680 Library"
+            - name: ArduinoJson
+            - name: Time
+          sketch-paths: |
+            ${{ matrix.additional-sketch-paths }}
