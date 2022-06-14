@@ -71,6 +71,7 @@ uint8_t selectedGraph = 0;
 uint8_t wifiCounter = 0;
 uint32_t sdDataDayOffset = 0;
 uint16_t sdDataOffset = 0;
+time_t co2Timeout = 0;
 
 struct sensorData sensor;
 struct currentWeatherHandle currentWeather;
@@ -201,6 +202,7 @@ void setup()
   display.print(ssid);
   display.partialUpdate(false, true);
   WiFi.begin(ssid, pass);
+  powerUpCO2sensor(&co2Timeout);
   while (WiFi.status() != WL_CONNECTED && wiFiRetry > 0)
   {
     delay(1000);
@@ -217,11 +219,14 @@ void setup()
   {
     display.print("Spajanje neuspjesno!");
     display.display();
+    readCO2sensor(&co2Timeout);
     esp_deep_sleep_start();
     while (1);
   }
 
   // Read data from sensors and from the Internet
+  readCO2sensor(&co2Timeout);
+
   readSensor(&sensor);
   updateWeatherData();
 
@@ -269,6 +274,7 @@ void setup()
   sensor.battery = ts.getBatteryVoltage();
   tNow = epochToHuman(rtc.getClock());
   gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
+
   esp_wifi_stop();
   btStop();
 
@@ -286,10 +292,6 @@ void loop()
   // If ESP32 has woken up, see what caused wake up and clear the INT flags in MCP23017
   uint16_t intPins = display.getINTInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
-
-  Serial.println(ESP.getFreeHeap());
-  Serial.println(ESP.getFreePsram());
-  Serial.println("------------");
 
   // If the touchscreen woke ESP32 up, get the X and Y of touch and check what has been pressed
   if ((intPins & (1 << 13)) && ts.available(&tsX, &tsY))
@@ -571,23 +573,14 @@ void loop()
   if ((rtc.checkAlarmFlag() && (intPins & (1 << 12))) || forcedRef)
   {
     uint8_t _rxOk = 0;
-    time_t _sgpTimeout = rtc.getClock() + 16;
-    uint16_t eco2Base, tvocBase;
 
     // Read the battery (TPS and nRF messes up battery readings)
-     sensor.battery = ts.getBatteryVoltage();
+    sensor.battery = ts.getBatteryVoltage();
 
-    // Power up and init C02 sensor
-    display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, HIGH);
-    delay(10);
-    sgp.begin();
-    EEPROM.get(8, eco2Base);
-    EEPROM.get(10, tvocBase);
-    sgp.setIAQBaseline(eco2Base, tvocBase);
     display.setFont(DISPLAY_FONT_SMALL);
     display.setTextSize(1);
     display.setCursor(5, 46);
-    display.print("Dohvacanje prognoze..");
+    display.print("Dohvacanje podataka...");
     display.partialUpdate(false, true);
 
     // If it's not the user forced update of data, that means is RTC and it's time to get the data from outdook unit
@@ -602,10 +595,13 @@ void loop()
       EEPROM.commit();
     }
 
-    // Get new weather data from the internet every 30 minutes
+    // Get new weather data from the internet and new CO2 readings every 30 minutes
     if (wifiCounter > 5 || forcedRef)
     {
       wifiCounter = 0;
+
+      powerUpCO2sensor(&co2Timeout);
+
       esp_wifi_start();
       WiFi.mode(WIFI_STA);
       WiFi.begin(ssid, pass);
@@ -620,29 +616,14 @@ void loop()
       if (WiFi.status() == WL_CONNECTED) updateWeatherData();
       esp_wifi_stop();
       btStop();
+
+      readCO2sensor(&co2Timeout);
     }
 
     display.print("citanje senzora...");
     display.partialUpdate();
 
-    // CO2 sensor must work at leasts 15 seconds in order to get any data
-    while(rtc.getClock() < _sgpTimeout)
-    {
-        //display.print('.');
-        //display.partialUpdate(false, true);
-        delay(1000);
-    }
-    //display.print("mjerenje..");
-    //display.partialUpdate(false, true);
-    sgp.IAQmeasure();
-    sgp.IAQmeasureRaw();
   	readSensor(&sensor);
-    // Save new baseline and power down sensor
-    //sgp.getIAQBaseline(&eco2Base, &tvocBase);
-    display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, LOW);
-    //EEPROM.put(8, eco2Base);
-    //EEPROM.put(10, tvocBase);
-    //EEPROM.commit();
     if (!forcedRef) rf.saveDataToSD(&sensor, _rxOk?&outdoorData:NULL);
     forcedRef = 0;
     modeSelect = 0;
@@ -850,4 +831,30 @@ uint8_t touchArea(int16_t tsX, int16_t tsY, int16_t x, int16_t y, int16_t w, int
 {
   if ((tsX >= x) && (tsY >= y) && (tsX < (x + w)) && (tsY < (y + h))) return 1;
   return 0;
+}
+
+void powerUpCO2sensor(time_t *_sgpTimeout)
+{
+  *_sgpTimeout = rtc.getClock() + 16;
+  uint16_t eco2Base, tvocBase;
+  // Power up and init C02 sensor
+  display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, HIGH);
+  delay(10);
+  sgp.begin();
+  EEPROM.get(8, eco2Base);
+  EEPROM.get(10, tvocBase);
+  sgp.setIAQBaseline(eco2Base, tvocBase);
+}
+
+void readCO2sensor(time_t *_sgpTimeout)
+{
+  // CO2 sensor must work at leasts 15 seconds in order to get any data
+  while(rtc.getClock() < (*_sgpTimeout))
+  {
+    delay(1000);
+  }
+  sgp.IAQmeasure();
+  sgp.IAQmeasureRaw();
+  // Power down sensor
+  display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, LOW);
 }
