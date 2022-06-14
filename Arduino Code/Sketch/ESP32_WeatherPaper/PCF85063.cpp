@@ -12,6 +12,9 @@ void pcf85063::readRegisters(uint8_t _reg, uint8_t *_data, uint8_t n)
   Wire.endTransmission(false);
 
   Wire.requestFrom((uint8_t)PCF85063_ADDR, n);
+
+  while (Wire.available() != n);
+
   for (int i = 0; i < n; i++)
   {
     _data[i] = Wire.read();
@@ -47,7 +50,7 @@ void pcf85063::RTCinit(uint8_t resetRTC)
    writeRegisters(PCF85063_CTRL2, &regData, 1);
 
   // Start RTC normally with internal cap set to 12.5 pF
-  regData = 0b00000001;
+  regData = 0b00000000;
   writeRegisters(PCF85063_CTRL1, &regData, 1);
 }
 
@@ -55,6 +58,7 @@ time_t pcf85063::getClock()
 {
   uint8_t regData[7];
   struct tm _myTime;
+  memset(&_myTime, 0, sizeof(_myTime));
   readRegisters(PCF85063_SECONDS, regData, 7);
   _myTime.tm_sec = bcd2dec(regData[0] & 0x7f);
   _myTime.tm_min = bcd2dec(regData[1] & 0x7f);
@@ -63,12 +67,14 @@ time_t pcf85063::getClock()
   _myTime.tm_wday = bcd2dec(regData[4] & 0x07);
   _myTime.tm_mon = bcd2dec(regData[5] & 0x1f);
   _myTime.tm_year = bcd2dec(regData[6]) + 2000 - 1900;
+  _myTime.tm_isdst = 0;
   return mktime(&_myTime);
 }
 
 void pcf85063::setClock(time_t _epoch)
 {
   struct tm _myTime;
+  memset(&_myTime, 0, sizeof(_myTime));
   uint8_t regData[8];
   memcpy(&_myTime, localtime((const time_t*)&_epoch), sizeof(tm));
   // 0x0f sotred i RAM means that clock is alredy set
@@ -87,6 +93,7 @@ void pcf85063::setAlarm(time_t _epoch)
 {
   uint8_t regData[5];
   struct tm _myTime;
+  memset(&_myTime, 0, sizeof(_myTime));
 
   clearAlarm();
   disableAlarm();

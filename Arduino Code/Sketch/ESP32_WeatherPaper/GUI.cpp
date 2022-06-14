@@ -164,7 +164,7 @@ void GUI::drawMainScreen(struct sensorData *_sensor, struct currentWeatherHandle
     _ink->display();
 }
 
-void GUI::printAlignText(char *text, int16_t x, int16_t y, enum alignment align)
+void GUI::printAlignText(const char *text, int16_t x, int16_t y, enum alignment align)
 {
   int16_t x1, y1;
   uint16_t w, h;
@@ -255,7 +255,7 @@ void GUI::drawGraph(int16_t _x, int16_t _y, uint16_t _w, uint16_t _h, void *_xDa
   for (int i = 0; i < _n; i++)
   {
     char temp[10];
-    time_t _epoch = (*(uint32_t*)((uint8_t*)(_xData) + (_step * i)));
+    time_t _epoch = (*(time_t*)((uint8_t*)(_xData) + (_step * i)));
     _time = localtime((const time_t*)&_epoch);
     _ink->drawFastVLine(_x + (i * _xSpacing) + (_xSpacing / 2), _y, _h + 3, BLACK);
     sprintf(temp, "%d:%02d", _time->tm_hour, _time->tm_min);
@@ -330,6 +330,9 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   _ink->fillRect((_graph * 70) + 35, 540, 70, 3, WHITE);
   _ink->fillRect(0, 170, 800, 360, WHITE);
 
+  // Draw icon for dumping saved data to UART
+  _ink->drawBitmap(750, 490, iconUart, 40, 40, BLACK);
+
   // Draw arrows for selecting the day
   _ink->fillTriangle(50, 10, 50, 40, 20, 25, BLACK);
   if (_dayOffset != 0) _ink->fillTriangle(750, 10, 750, 40, 780, 25, BLACK);
@@ -341,7 +344,7 @@ void GUI::drawOutdoorData(communication *_comm, time_t _epoch, uint32_t _dayOffs
   _ink->setFont(DISPLAY_FONT);
   _ink->setTextSize(1);
   _ink->setCursor(200, 35);
-  sprintf(_tempStr, "Vanjska jed. %d.%02d.%04d, %s", epochToHuman(_newTime).tm_mday, epochToHuman(_newTime).tm_mon, epochToHuman(_newTime).tm_year + 1900, DOW[epochToHuman(_newTime).tm_wday]);
+  sprintf(_tempStr, "Vanjska jed. %d.%02d.%04d, %s", epochToHuman(_newTime).tm_mday, epochToHuman(_newTime).tm_mon + 1, epochToHuman(_newTime).tm_year + 1900, DOW[epochToHuman(_newTime).tm_wday]);
   _ink->setCursor(200, 35);
   _ink->print(_tempStr);
   // Draw bottom line and icons
@@ -455,6 +458,9 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
   _ink->fillRect((_graph * 70) + 35, 540, 70, 3, WHITE);
   _ink->fillRect(0, 170, 800, 360, WHITE);
 
+  // Draw icon for dumping saved data to UART
+  _ink->drawBitmap(750, 490, iconUart, 40, 40, BLACK);
+
   // Draw arrows for selecting the day
   _ink->fillTriangle(50, 10, 50, 40, 20, 25, BLACK);
   if (_dayOffset != 0) _ink->fillTriangle(750, 10, 750, 40, 780, 25, BLACK);
@@ -466,7 +472,7 @@ void GUI::drawIndoorData(communication *_comm, time_t _epoch, uint32_t _dayOffse
   _ink->setFont(DISPLAY_FONT);
   _ink->setTextSize(1);
   _ink->setCursor(200, 35);
-  sprintf(_tempStr, "Unutrasnja jed. %d.%02d.%04d, %s", epochToHuman(_newTime).tm_mday, epochToHuman(_newTime).tm_mon, epochToHuman(_newTime).tm_year + 1900, DOW[epochToHuman(_newTime).tm_wday]);
+  sprintf(_tempStr, "Unutrasnja jed. %d.%02d.%04d, %s", epochToHuman(_newTime).tm_mday, epochToHuman(_newTime).tm_mon + 1, epochToHuman(_newTime).tm_year + 1900, DOW[epochToHuman(_newTime).tm_wday]);
   _ink->setCursor(200, 35);
   _ink->print(_tempStr);
   // Draw bottom line and icons

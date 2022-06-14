@@ -5,7 +5,7 @@
 #include "structs.h"
 #include "PCF85063.h"
 
-#define WAKEUP_INTERVAL         10
+#define WAKEUP_INTERVAL         5
 #define COMMUNICATION_INDDOR    0
 #define COMMUNICATION_OUTDDOR   1
 

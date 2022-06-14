@@ -24,7 +24,7 @@
 #define PCF85063_MDAY_AL      0x0E
 #define PCF85063_WDAY_AL      0x0F
 
-#define PCF85063_CTRL2_MASK   0b00000101
+#define PCF85063_CTRL2_MASK   0b00000111
 
 static inline uint8_t bcd2dec(uint8_t _bcd)
 {

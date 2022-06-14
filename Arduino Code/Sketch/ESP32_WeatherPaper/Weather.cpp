@@ -9,7 +9,7 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(25000);
+  DynamicJsonDocument doc(35000);
   http.useHTTP10(true);
 
   if (http.begin(client, _url))
@@ -18,6 +18,9 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
     {
       DeserializationError err =  deserializeJson(doc, http.getStream());
       if (err) return 0;
+
+      if (!doc.containsKey("cod")) return 0;
+
       if (doc["cod"] == 200)
       {
         strncpy(_c->weatherIcon, doc["weather"][0]["icon"], sizeof(_c->weatherIcon) - 1);
@@ -64,7 +67,7 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(24576);
+  DynamicJsonDocument doc(35000);
   http.useHTTP10(true);
 
   if (http.begin(client, _url))
@@ -73,6 +76,9 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
     {
       DeserializationError err = deserializeJson(doc, http.getStream());
       if (err) return 0;
+
+      if (!doc.containsKey("cod")) return 0;
+
       if (atoi(doc["cod"]) == 200)
       {
         _f->numberOfData = doc["cnt"];
@@ -156,13 +162,14 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
     }
     http.end();
   }
+  return 1;
 }
 
 uint8_t OWMWeather::oneCall(const char *_url, oneCallApiHandle *_o)
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(25000);
+  DynamicJsonDocument doc(35000);
   //http.useHTTP10(true);
 
   if (http.begin(client, _url))

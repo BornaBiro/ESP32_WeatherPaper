@@ -59,7 +59,8 @@ time_t timeToWake;
 int timeOffset;
 
 const char ssid[] = "Biro_WLAN";
-const char pass[] = "CaVex250_H2sH11";
+//const char pass[] = "CaVex250_H2sH11";
+const char pass[] = "tps65186PMIC";
 //const char ssid[] = "Optima-322d0e";
 //const char pass[] = "OPTIMA2649004925";
 
@@ -194,7 +195,7 @@ void setup()
     display.print(' ');
     display.print(WiFi.RSSI(i), DEC);
   }
-  display.partialUpdate();
+  display.partialUpdate(false, true);
   display.setCursor(70, 550);
   display.print(F("Spajanje na "));
   display.print(ssid);
@@ -210,7 +211,7 @@ void setup()
   if(WiFi.status() == WL_CONNECTED)
   {
     display.print("spojeno! Pricekajte...");
-    display.partialUpdate();
+    display.partialUpdate(false, true);
   }
   else
   {
@@ -249,7 +250,7 @@ void setup()
       display.print("Sinkronizacija nije uspjela");
       display.display();
       timeToWake = rf.newWakeupTime(rtc.getClock());
-      rtc.setAlarm(timeToWake);
+      //rtc.setAlarm(timeToWake);
       EEPROM.put(0, timeToWake);
       EEPROM.commit();
     }
@@ -259,14 +260,19 @@ void setup()
   if ((rtc.getClock() >= timeToWake) || (abs(timeToWake - rtc.getClock()) > (60 * WAKEUP_INTERVAL)))
   {
     timeToWake = rf.newWakeupTime(rtc.getClock());
-    rtc.setAlarm(timeToWake);
+    //rtc.setAlarm(timeToWake);
     EEPROM.put(0, timeToWake);
     EEPROM.commit();
   }
+  
+  // Read the battery (TPS and nRF messes up battery readings)
+  sensor.battery = ts.getBatteryVoltage();
   tNow = epochToHuman(rtc.getClock());
   gui.drawMainScreen(&sensor, &currentWeather, &forecastList, forecastDisplay, &oneCallApi, &outdoorData, &tNow);
   esp_wifi_stop();
   btStop();
+
+  rtc.setAlarm(timeToWake);
 }
 
 void loop()
@@ -281,13 +287,9 @@ void loop()
   uint16_t intPins = display.getINTInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
   display.getINTstateInternal(MCP23017_INT_ADDR, display.mcpRegsInt);
 
-  time_t eepromWake;
-  EEPROM.get(0, eepromWake);
-  Serial.println(rtc.getClock(), DEC);
-  Serial.println(timeToWake, DEC);
-  Serial.println(eepromWake, DEC);
-  Serial.println("--------------");
-  Serial.flush();
+  Serial.println(ESP.getFreeHeap());
+  Serial.println(ESP.getFreePsram());
+  Serial.println("------------");
 
   // If the touchscreen woke ESP32 up, get the X and Y of touch and check what has been pressed
   if ((intPins & (1 << 13)) && ts.available(&tsX, &tsY))
@@ -310,7 +312,7 @@ void loop()
           time_t _myNewAlarmTime;
           uint8_t _wiFiRetry = 0;
           writeInfoBox(350, "Sinkronizacija sata...");
-          display.partialUpdate();
+          display.partialUpdate(false, true);
           esp_wifi_start();
           WiFi.mode(WIFI_STA);
           WiFi.begin(ssid, pass);
@@ -324,7 +326,7 @@ void loop()
             if (readNTP(&_myNewTime))
             {
               writeInfoBox(350, "Sinkronizacija sata ok!");
-              display.partialUpdate();
+              display.partialUpdate(false, true);
               rtc.setClock(_myNewTime);
               _myNewAlarmTime = rf.newWakeupTime(_myNewTime);
               rtc.setAlarm(_myNewAlarmTime);
@@ -359,7 +361,7 @@ void loop()
           display.setFont(DISPLAY_FONT);
           display.setCursor(610, 35);
           writeInfoBox(350, "Osvjez. podataka, pricekajte");
-          display.partialUpdate();
+          display.partialUpdate(false, true);
           forcedRef = 1;
         }
 
@@ -413,7 +415,7 @@ void loop()
 
           selectedGraph = (tsX - 50) / 70;
           drawSelectedGraph(selectedGraph, selectedDay);
-          display.partialUpdate();
+          display.partialUpdate(false, true);
         }
 
         // Show pop-up "window" with data of selected day and time
@@ -476,7 +478,7 @@ void loop()
             display.print("mm");
           }
           display.setTextSize(1);
-          display.partialUpdate();
+          display.partialUpdate(false, true);
         }
         break;
 
@@ -543,7 +545,7 @@ void loop()
           // Go back to the last measurement in day
           if (touchArea(tsX, tsY, 730, 140, 30, 30))
           {
-            sdDataDayOffset = 0;
+            sdDataOffset = 0;
             if (modeSelect == 2) gui.drawOutdoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
             if (modeSelect == 3) gui.drawIndoorData(&rf, rtc.getClock(), sdDataDayOffset, &sdDataOffset, selectedGraph, 1);
             display.partialUpdate(false, true);
@@ -572,6 +574,9 @@ void loop()
     time_t _sgpTimeout = rtc.getClock() + 16;
     uint16_t eco2Base, tvocBase;
 
+    // Read the battery (TPS and nRF messes up battery readings)
+     sensor.battery = ts.getBatteryVoltage();
+
     // Power up and init C02 sensor
     display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, HIGH);
     delay(10);
@@ -582,8 +587,8 @@ void loop()
     display.setFont(DISPLAY_FONT_SMALL);
     display.setTextSize(1);
     display.setCursor(5, 46);
-    display.print("Dohvacanje novih podataka");
-    display.partialUpdate();
+    display.print("Dohvacanje prognoze..");
+    display.partialUpdate(false, true);
 
     // If it's not the user forced update of data, that means is RTC and it's time to get the data from outdook unit
     if (!forcedRef)
@@ -598,7 +603,7 @@ void loop()
     }
 
     // Get new weather data from the internet every 30 minutes
-    if (wifiCounter > 2 || forcedRef)
+    if (wifiCounter > 5 || forcedRef)
     {
       wifiCounter = 0;
       esp_wifi_start();
@@ -609,29 +614,35 @@ void loop()
       {
         delay(1000);
         display.print('.');
-        display.partialUpdate();
+        display.partialUpdate(false, true);
+        i++;
       }
       if (WiFi.status() == WL_CONNECTED) updateWeatherData();
       esp_wifi_stop();
       btStop();
     }
 
+    display.print("citanje senzora...");
+    display.partialUpdate();
+
     // CO2 sensor must work at leasts 15 seconds in order to get any data
     while(rtc.getClock() < _sgpTimeout)
     {
-        display.print('.');
-        display.partialUpdate();
+        //display.print('.');
+        //display.partialUpdate(false, true);
         delay(1000);
     }
+    //display.print("mjerenje..");
+    //display.partialUpdate(false, true);
     sgp.IAQmeasure();
     sgp.IAQmeasureRaw();
   	readSensor(&sensor);
     // Save new baseline and power down sensor
-    sgp.getIAQBaseline(&eco2Base, &tvocBase);
+    //sgp.getIAQBaseline(&eco2Base, &tvocBase);
     display.digitalWriteInternal(MCP23017_INT_ADDR, display.mcpRegsInt, 11, LOW);
-    EEPROM.put(8, eco2Base);
-    EEPROM.put(10, tvocBase);
-    EEPROM.commit();
+    //EEPROM.put(8, eco2Base);
+    //EEPROM.put(10, tvocBase);
+    //EEPROM.commit();
     if (!forcedRef) rf.saveDataToSD(&sensor, _rxOk?&outdoorData:NULL);
     forcedRef = 0;
     modeSelect = 0;
@@ -644,7 +655,7 @@ void loop()
   }
 }
 
-void writeInfoBox(int y, char* c)
+void writeInfoBox(int y, char *c)
 {
   int16_t  x1, y1;
   uint16_t w, h;
@@ -659,11 +670,11 @@ void writeInfoBox(int y, char* c)
   display.setCursor(x, y);
   display.print(c);
   display.setTextSize(1);
-}
+} 
 
 void readSensor(struct sensorData *_s)
 {
-  _s->epoch = (uint32_t)rtc.getClock();
+  _s->epoch = (time_t)rtc.getClock();
   bme.takeForcedMeasurement();
   _s->temp = bme.readTemperature();
   _s->humidity = bme.readHumidity();
@@ -672,7 +683,6 @@ void readSensor(struct sensorData *_s)
   _s->tvoc = sgp.TVOC;
   _s->rawH2 = sgp.rawH2;
   _s->rawEthanol = sgp.rawEthanol;
-  _s->battery = ts.getBatteryVoltage();
 }
 
 bool readNTP(time_t *_epoch)
@@ -705,7 +715,7 @@ bool readNTP(time_t *_epoch)
     if (udp.parsePacket() >= 48)
     {
       udp.read(ntpPacket, 48);
-      uint32_t unix = ntpPacket[40] << 24 | ntpPacket[41] << 16 | ntpPacket[42] << 8 | ntpPacket[43];
+      int32_t unix = ntpPacket[40] << 24 | ntpPacket[41] << 16 | ntpPacket[42] << 8 | ntpPacket[43];
       *_epoch = unix - 2208988800UL + currentWeather.timezone;
       return true;
     }
@@ -777,7 +787,7 @@ void drawDays(uint8_t n, bool fullUpdate)
   }
   else
   {
-    display.partialUpdate();
+    display.partialUpdate(false, true);
   }
 }
 

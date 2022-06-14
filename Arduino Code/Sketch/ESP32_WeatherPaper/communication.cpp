@@ -66,6 +66,7 @@ uint8_t communication::sync(struct syncStructHandle *_s)
 uint8_t communication::getData(struct syncStructHandle *_s, struct measruementHandle *_h)
 {
   _myRf->powerUp();
+  delay(100);
   setupCommunication();
   struct data1StructHandle _d1 = {0};
   struct data2StructHandle _d2 = {0};
@@ -112,6 +113,7 @@ uint8_t communication::getData(struct syncStructHandle *_s, struct measruementHa
     delay(1000);
     rxTimeout--;
   }
+  *_s = makeSyncStruct();
   _myRf->flush_tx();
   _myRf->flush_rx();
   _myRf->powerDown();
@@ -262,11 +264,14 @@ uint8_t communication::getIndoorDataFromSD(time_t _epoch, int16_t _n, struct sen
       _oneLine[_size] = 0;
       _oneLine[_size + 1] = '\r';
       _oneLine[_size + 2] = '\n';
+      //Serial.println(_oneLine);
       int _dummy;
       // For some weird reason it wont copy directly in _d[i].timeStamp, so we have to use additional variable
-      int _tempEpoch;
-      sscanf(_oneLine, _indoorDataEntrySD, &_dummy, &_tempEpoch, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].temp), &(_d[i].humidity), &(_d[i].pressure), &(_d[i].eco2), &(_d[i].tvoc), &(_d[i].rawH2), &(_d[i].rawEthanol));
-      _d[i].epoch = _tempEpoch;
+      //int _tempEpoch;
+      //_d[i].epoch = 1642447563ULL;
+      sscanf(_oneLine, _indoorDataEntrySD, &_dummy, &(_d[i].epoch), &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &_dummy, &(_d[i].battery), &(_d[i].temp), &(_d[i].humidity), &(_d[i].pressure), &(_d[i].eco2), &(_d[i].tvoc), &(_d[i].rawH2), &(_d[i].rawEthanol));
+      //_d[i].epoch = _tempEpoch;
+      //Serial.println(_d[i].epoch);
     }
     free(_dataStartPos);
     free(_oneLine);
@@ -355,8 +360,8 @@ void communication::getFolderPath(char *_s, time_t _epoch, uint8_t _indoor)
 struct syncStructHandle communication::makeSyncStruct()
 {
   syncStructHandle _s = {SYNC_HEADER};
-  _s.myEpoch = (uint32_t)(_rtc->getClock());
-  _s.sendEpoch = (uint32_t)newWakeupTime((time_t)_s.myEpoch);
+  _s.myEpoch = _rtc->getClock();
+  _s.sendEpoch = newWakeupTime((time_t)_s.myEpoch);
   return _s;
 }
 
@@ -364,7 +369,8 @@ time_t communication::newWakeupTime(time_t _current)
 {
   struct tm _myTime;
   time_t _alarmEpoch;
-  memcpy (&_myTime, localtime((const time_t *) &_current), sizeof (_myTime));
+  memset(&_myTime, 0, sizeof(_myTime));
+  memcpy(&_myTime, localtime((const time_t *) &_current), sizeof (_myTime));
 
   int minutes = (int)(ceil(((double) (_myTime.tm_min) + ((double) (_myTime.tm_sec) / 60)) / WAKEUP_INTERVAL) * WAKEUP_INTERVAL);
   _myTime.tm_min = minutes % 60;
