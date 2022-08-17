@@ -9,23 +9,45 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(35000);
-  http.useHTTP10(true);
+  DynamicJsonDocument doc(5000);
+
+  char *_tempData = (char*)ps_malloc(5000 * sizeof(char));
+  if (_tempData == NULL) return 0;
+
+  // http.useHTTP10(true);
 
   if (http.begin(client, _url))
   {
     if (http.GET() > 0)
     {
-      DeserializationError err =  deserializeJson(doc, http.getStream());
-      if (err) return 0;
+      const char *_tempPtr = http.getString().c_str();
+      strlcpy(_tempData, _tempPtr, 5000);
+      Serial.println(_tempData);
+      DeserializationError err =  deserializeJson(doc, _tempData);
+      if (err)
+      {
+        free(_tempData);
+        http.end();  
+        return 0;
+      }
 
-      if (!doc.containsKey("cod")) return 0;
+      if (!doc.containsKey("cod"))
+      {
+        free(_tempData);
+        http.end();  
+        return 0;
+      }
 
       if (doc["cod"] == 200)
       {
-        strncpy(_c->weatherIcon, doc["weather"][0]["icon"], sizeof(_c->weatherIcon) - 1);
-        removeCroLetters(strncpy(_c->weatherDesc, doc["weather"][0]["description"], sizeof(_c->weatherDesc) - 1));
-        removeCroLetters(strncpy(_c->city, doc["name"], sizeof(_c->city) - 1));
+        // Clear the whole struct before fillig it with data
+        memset(_c, 0, sizeof(currentWeatherHandle));
+
+        strlcpy(_c->weatherIcon, doc["weather"][0]["icon"] | "01d", sizeof(_c->weatherIcon) - 1);
+        strlcpy(_c->weatherDesc, doc["weather"][0]["description"] | "<ERR!>", sizeof(_c->weatherDesc) - 1);
+        removeCroLetters(_c->weatherDesc);
+        strlcpy(_c->city, doc["name"] | "<ERR!>", sizeof(_c->city) - 1);
+        removeCroLetters(_c->city);
         _c->temp = doc["main"]["temp"];
         _c->feelsLike = doc["main"]["feels_like"];
         _c->humidity = doc["main"]["humidity"];
@@ -47,18 +69,25 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
       }
       else
       {
+        free(_tempData);
+        http.end();
         return 0;
       }
     }
     else
     {
+      free(_tempData);
+      http.end();
       return 0;
     }
   }
   else
   {
+    free(_tempData);
+    http.end();
     return 0;
   }
+  free(_tempData);
   http.end();
   return 1;
 }
@@ -67,25 +96,47 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(35000);
-  http.useHTTP10(true);
+  DynamicJsonDocument doc(50000);
+
+  char *_tempData = (char*)ps_malloc(50000 * sizeof(char));
+  if (_tempData == NULL) return 0;
+
+  //http.useHTTP10(true);
 
   if (http.begin(client, _url))
   {
     if (http.GET() > 0)
     {
-      DeserializationError err = deserializeJson(doc, http.getStream());
-      if (err) return 0;
-
-      if (!doc.containsKey("cod")) return 0;
-
-      if (atoi(doc["cod"]) == 200)
+      const char *_tempPtr = http.getString().c_str();
+      strlcpy(_tempData, _tempPtr, 50000);
+      Serial.println(_tempData);
+      DeserializationError err = deserializeJson(doc, _tempData);
+      if (err) 
       {
+        free(_tempData);
+        http.end();
+        return 0;
+      }
+
+      if (!doc.containsKey("cod"))
+      {
+        free(_tempData);
+        http.end();
+        return 0;
+      }
+
+      if (doc["cod"] == "200")
+      {
+        // Clear the whole struct before fillig it with data
+        memset(_f, 0, sizeof(forecastListHandle)); 
+        memset(_d, 0, sizeof(forecastDisplayHandle));
+
         _f->numberOfData = doc["cnt"];
         for (int i = 0; i < _f->numberOfData; i++)
         {
-          removeCroLetters(strncpy(_f->forecast[i].weatherDesc, doc["list"][i]["weather"][0]["description"], sizeof(_f->forecast[i].weatherDesc) - 1));
-          strncpy(_f->forecast[i].weatherIcon, doc["list"][i]["weather"][0]["icon"], sizeof(_f->forecast[i].weatherIcon) - 1);
+          strlcpy(_f->forecast[i].weatherDesc, doc["list"][i]["weather"][0]["description"] | "<ERR!>", sizeof(_f->forecast[i].weatherDesc) - 1);
+          removeCroLetters(_f->forecast[i].weatherDesc);
+          strlcpy(_f->forecast[i].weatherIcon, doc["list"][i]["weather"][0]["icon"] | "01d", sizeof(_f->forecast[i].weatherIcon) - 1);
           _f->forecast[i].clouds = doc["list"][i]["clouds"]["all"];
           _f->forecast[i].humidity = doc["list"][i]["main"]["humidity"];
           _f->forecast[i].probability = (float)(doc["list"][i]["pop"]) * 100;
@@ -157,11 +208,17 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
       }
       else
       {
+          free(_tempData);
+          http.end();
           return 0;
       }
     }
+    free(_tempData);
     http.end();
+    return 0;
   }
+  free(_tempData);
+  http.end();
   return 1;
 }
 
@@ -169,32 +226,50 @@ uint8_t OWMWeather::oneCall(const char *_url, oneCallApiHandle *_o)
 {
   WiFiClient client;
   HTTPClient http;
-  DynamicJsonDocument doc(35000);
+  DynamicJsonDocument doc(4000);
   //http.useHTTP10(true);
 
+  char *_tempData = (char*)ps_malloc(4000 * sizeof(char));
+  if (_tempData == NULL) return 0;
+  
   if (http.begin(client, _url))
   {
     if (http.GET() > 0)
     {
-      DeserializationError err =  deserializeJson(doc, http.getStream());
+      const char *_tempPtr = http.getString().c_str();
+      strlcpy(_tempData, _tempPtr, 4000);
+      DeserializationError err =  deserializeJson(doc, _tempData);
       if (err) return 0;
       if (doc.containsKey("alerts"))
       {
-        strncpy(_o->alertEvent, doc["alerts"][0]["event"], sizeof(_o->alertEvent));
+        // Clear the whole struct before fillig it with data
+        memset(_o, 0, sizeof(oneCallApiHandle)); 
+
+        strlcpy(_o->alertEvent, doc["alerts"][0]["event"] | "<ERR!>", sizeof(_o->alertEvent));
         _o->alertStart = doc["alerts"][0]["start"];
         _o->alertEnd = doc["alerts"][0]["end"];
       }
-
+      else
+      {
+        memset(_o->alertEvent, 0, sizeof(_o->alertEvent));
+        _o->alertStart = 0;
+        _o->alertEnd = 0;
+      }
     }
     else
     {
+      free(_tempData);
+      http.end();
       return 0;
     }
   }
   else
   {
+    free(_tempData);
+    http.end();
     return 0;
   }
+  free(_tempData);
   http.end();
   return 1;
 }

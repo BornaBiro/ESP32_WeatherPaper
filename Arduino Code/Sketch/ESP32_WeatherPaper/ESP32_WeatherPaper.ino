@@ -59,6 +59,7 @@ time_t timeToWake;
 int timeOffset;
 
 const char ssid[] = "Biro_WLAN";
+//const char ssid[] = "BornaSGS20+5G";
 //const char pass[] = "CaVex250_H2sH11";
 const char pass[] = "tps65186PMIC";
 //const char ssid[] = "Optima-322d0e";

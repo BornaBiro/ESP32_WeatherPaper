@@ -205,7 +205,11 @@ int16_t communication::getNumberOfEntries(time_t _epoch, uint8_t _indoor)
   if (!_sd->chdir(_temp)) return -2;
 
   sprintf(_temp, _filenameStr, _t->tm_mday, _t->tm_mon + 1, _t->tm_year + 1900);
-  if (!_file.open(_temp, O_RDONLY)) return -1;
+  if (!_file.open(_temp, O_RDONLY))
+  {
+    _file.close();  
+    return -1;
+  }
 
   while (_file.available())
   {
@@ -240,7 +244,13 @@ uint8_t communication::getIndoorDataFromSD(time_t _epoch, int16_t _n, struct sen
     int _entries = 0;
     uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 2));
     char *_oneLine = (char*)ps_malloc(sizeof(char) * (600));
-    if (_dataStartPos == NULL || _oneLine == NULL) return 0;
+    if (_dataStartPos == NULL || _oneLine == NULL)
+    {
+      free(_dataStartPos);
+      free(_oneLine);
+      _file.close();
+      return 0;
+    }
 
     // Find start of each new line
     _file.rewind();
@@ -304,7 +314,13 @@ uint8_t communication::getOutdoorDataFromSD(time_t _epoch, int16_t _n, struct me
     int _entries = 0;
     uint32_t *_dataStartPos = (uint32_t*)ps_malloc(sizeof(uint32_t) * (_n + 2));
     char *_oneLine = (char*)ps_malloc(sizeof(char) * (600));
-    if (_dataStartPos == NULL || _oneLine == NULL) return 0;
+    if (_dataStartPos == NULL || _oneLine == NULL)
+    {
+      free(_dataStartPos);
+      free(_oneLine);
+      _file.close();  
+      return 0;
+    }
 
     // Find start of each new line
     _file.rewind();
