@@ -102,8 +102,8 @@ void pcf85063::setAlarm(time_t _epoch)
   regData[0] = dec2bcd(_myTime.tm_sec);
   regData[1] = dec2bcd(_myTime.tm_min);
   regData[2] = dec2bcd(_myTime.tm_hour);
-  regData[3] = dec2bcd(_myTime.tm_mday);
-  regData[4] = _myTime.tm_wday;
+  regData[3] = (1 << 7); // Disable alarm on day match.
+  regData[4] = (1 << 7); // Disable alarm on weekday match.
 
   // Set up alarm time
   writeRegisters(PCF85063_SEC_AL, regData, 5);
