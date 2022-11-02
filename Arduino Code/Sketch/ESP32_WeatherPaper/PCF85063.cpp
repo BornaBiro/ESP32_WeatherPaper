@@ -65,7 +65,7 @@ time_t pcf85063::getClock()
   _myTime.tm_hour = bcd2dec(regData[2] & 0x7f);
   _myTime.tm_mday = bcd2dec(regData[3] & 0x3f);
   _myTime.tm_wday = bcd2dec(regData[4] & 0x07);
-  _myTime.tm_mon = bcd2dec(regData[5] & 0x1f);
+  _myTime.tm_mon = bcd2dec(regData[5] & 0x1f) - 1;
   _myTime.tm_year = bcd2dec(regData[6]) + 2000 - 1900;
   _myTime.tm_isdst = 0;
   return mktime(&_myTime);
@@ -77,14 +77,14 @@ void pcf85063::setClock(time_t _epoch)
   memset(&_myTime, 0, sizeof(_myTime));
   uint8_t regData[8];
   memcpy(&_myTime, localtime((const time_t*)&_epoch), sizeof(tm));
-  // 0x0f sotred i RAM means that clock is alredy set
+  // 0x0f stored in RAM means that clock is alredy set
   regData[0] = 0x0f;
   regData[1] = dec2bcd(_myTime.tm_sec);
   regData[2] = dec2bcd(_myTime.tm_min);
   regData[3] = dec2bcd(_myTime.tm_hour);
   regData[4] = dec2bcd(_myTime.tm_mday);
   regData[5] = _myTime.tm_wday;
-  regData[6] = dec2bcd(_myTime.tm_mon);
+  regData[6] = dec2bcd(_myTime.tm_mon + 1);
   regData[7] = dec2bcd((_myTime.tm_year + 1900) % 100);
   writeRegisters(PCF85063_RAMBYTE, regData, 8);
 }
