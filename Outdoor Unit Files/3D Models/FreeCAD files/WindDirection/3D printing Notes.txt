@@ -1,0 +1,5 @@
+Arrow holder: 15% Infill, 4 perimeters, 0,45mm extrusion width
+Wing: 15% Infill, 4 perimeters, 0,45mm extrusion width
+
+Arrow and wing must be balanced! Otherwise this sensor will not work properly!
+Shaft for the arrow is longer, so cut it until the wing and arrow are in balance!

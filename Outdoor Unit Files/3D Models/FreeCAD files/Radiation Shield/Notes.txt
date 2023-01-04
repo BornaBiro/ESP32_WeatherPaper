@@ -1,0 +1,6 @@
+- Radiation Shield MUST be printed with white PETG
+- Rod holder needs to be printed with 0.15mm layers, minimum of 4 perimeters
+
+You will also need very thin piece of acrylic and epoxy glue and a very dense metal mesh for temperature sensor.
+
+WARNING: It still does not make a good radiation shield, temp. difference Sun vs no Sun can be as high as 2°C! More tinkering is needed.

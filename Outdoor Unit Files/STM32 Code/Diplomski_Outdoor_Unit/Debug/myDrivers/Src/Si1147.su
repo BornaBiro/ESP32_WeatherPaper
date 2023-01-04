@@ -1,0 +1,12 @@
+Si1147.c:5:9:Si1147_ReadReg	40	static
+Si1147.c:13:6:Si1147_WriteReg	24	static
+Si1147.c:19:6:Si1147_WriteRegs	16	static
+Si1147.c:24:6:Si1147_ReadRegs	40	static
+Si1147.c:30:6:Si1147_ClearResponseReg	24	static
+Si1147.c:36:9:Si1147_GetResponse	32	static
+Si1147.c:44:9:Si1147_Init	24	static
+Si1147.c:95:6:Si1147_SetUV	16	static
+Si1147.c:127:6:Si1147_ForceUV	8	static
+Si1147.c:141:7:Si1147_GetUV	16	static
+Si1147.c:151:9:Si1147_GetVis	16	static
+Si1147.c:160:9:Si1147_GetIR	16	static

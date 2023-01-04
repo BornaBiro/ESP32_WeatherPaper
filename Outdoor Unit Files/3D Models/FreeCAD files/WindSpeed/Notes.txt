@@ -1,0 +1,2 @@
+- IR Interupter used: https://soldered.com/product/photointerrupter-itr9608/
+- Wind Cups: 15% infil, 4 perimeters minimum, 0.1mm layers, black PETG (MUST BE BLACK!)
