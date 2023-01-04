@@ -1,0 +1,13 @@
+- Button_v2 MUST be printed with soft TPU. Disable retraction!
+- PG7 cable glands are used
+- cablePlug is used to plug cable glands that are not used (for future use)
+- Everything must be printed with white PETG (20% infill, 4 perimieters minimum)
+- buttonRing must be printed with 100% infill or 4 perimeters minimum
+
+- You will also need:
+- Rubber gasket 1.5mm in diameter (or you can use 1.75mm TPU)
+- 4 x 25mm M4 bolts
+- 8 x 10mm M3 bolts
+- 11 x PG-7 cable glands
+- Acrylic for the display (2mm thick)
+- Glue for acrylic 

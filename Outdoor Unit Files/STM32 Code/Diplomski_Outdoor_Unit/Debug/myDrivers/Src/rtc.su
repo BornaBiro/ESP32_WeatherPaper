@@ -1,0 +1,5 @@
+rtc.c:23:8:RTC_GetTime	88	static
+rtc.c:61:8:RTC_HumanToEpoch	8	static
+rtc.c:66:11:RTC_EpochToHuman	64	static
+rtc.c:5:6:RTC_SetTime	96	static
+rtc.c:43:6:RTC_SetAlarmEpoch	128	static

@@ -1,0 +1,12 @@
+main.c:419:6:SystemClock_Config	136	static
+main.c:854:6:writeError	24	static
+main.c:926:10:getADC	24	static
+main.c:900:6:getSolarData	24	static
+main.c:959:7:getWindSpeed	32	static
+main.c:1007:9:getWindDir	16	static
+main.c:1027:7:getBatteryVoltage	16	static
+main.c:864:6:readWeatherData	24	static
+main.c:131:5:main	224	static
+main.c:1037:6:HAL_GPIO_EXTI_Callback	0	static
+main.c:1042:6:HAL_RTC_AlarmAEventCallback	0	static
+main.c:1052:6:Error_Handler	0	static

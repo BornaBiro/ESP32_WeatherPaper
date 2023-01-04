@@ -1,0 +1,2 @@
+communication.c:7:6:communication_Setup	8	static
+communication.c:55:9:communication_Transmit	8	static
