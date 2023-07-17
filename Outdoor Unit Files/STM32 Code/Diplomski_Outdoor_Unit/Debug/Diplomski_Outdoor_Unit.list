@@ -23,23 +23,23 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   ALLOC
   9 .ARM.attributes 00000028  00000000  00000000  00020288  2**0
                   CONTENTS, READONLY
- 10 .debug_info   0002392d  00000000  00000000  000202b0  2**0
+ 10 .debug_info   00023967  00000000  00000000  000202b0  2**0
                   CONTENTS, READONLY, DEBUGGING
- 11 .debug_abbrev 0000467c  00000000  00000000  00043bdd  2**0
+ 11 .debug_abbrev 0000467c  00000000  00000000  00043c17  2**0
                   CONTENTS, READONLY, DEBUGGING
- 12 .debug_loc    000101ec  00000000  00000000  00048259  2**0
+ 12 .debug_loc    000101ec  00000000  00000000  00048293  2**0
                   CONTENTS, READONLY, DEBUGGING
- 13 .debug_aranges 00001500  00000000  00000000  00058448  2**3
+ 13 .debug_aranges 00001500  00000000  00000000  00058480  2**3
                   CONTENTS, READONLY, DEBUGGING
- 14 .debug_ranges 000019e0  00000000  00000000  00059948  2**3
+ 14 .debug_ranges 000019e0  00000000  00000000  00059980  2**3
                   CONTENTS, READONLY, DEBUGGING
- 15 .debug_line   0000bd29  00000000  00000000  0005b328  2**0
+ 15 .debug_line   0000be85  00000000  00000000  0005b360  2**0
                   CONTENTS, READONLY, DEBUGGING
- 16 .debug_str    00006a87  00000000  00000000  00067051  2**0
+ 16 .debug_str    00006ac1  00000000  00000000  000671e5  2**0
                   CONTENTS, READONLY, DEBUGGING
- 17 .comment      0000007c  00000000  00000000  0006dad8  2**0
+ 17 .comment      0000007c  00000000  00000000  0006dca6  2**0
                   CONTENTS, READONLY
- 18 .debug_frame  000050f8  00000000  00000000  0006db54  2**2
+ 18 .debug_frame  000050f8  00000000  00000000  0006dd24  2**2
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -14478,7 +14478,7 @@ void writeError(uint8_t _e, uint8_t _forceSleep)
  8005cc8:	0800a3d1 	.word	0x0800a3d1
 
 08005ccc <getADC>:
-  *_energy = current / 40E-3 * 1000;
+  *_energy = current / 45E-3 * 1000;
   *_energyJ = (1 / 1E4) * (*_energy) * 600;
 }
 
@@ -14620,7 +14620,7 @@ uint32_t getADC(uint32_t _ch)
  8005d8e:	4b13      	ldr	r3, [pc, #76]	; (8005ddc <getSolarData+0xb0>)
  8005d90:	0020      	movs	r0, r4
  8005d92:	f7fb fd4f 	bl	8001834 <__aeabi_ddiv>
-  *_energy = current / 40E-3 * 1000;
+  *_energy = current / 45E-3 * 1000;
  8005d96:	4a12      	ldr	r2, [pc, #72]	; (8005de0 <getSolarData+0xb4>)
  8005d98:	4b12      	ldr	r3, [pc, #72]	; (8005de4 <getSolarData+0xb8>)
  8005d9a:	f7fb fd4b 	bl	8001834 <__aeabi_ddiv>
@@ -14629,7 +14629,7 @@ uint32_t getADC(uint32_t _ch)
  8005da2:	f7fc f97b 	bl	800209c <__aeabi_dmul>
   *_energyJ = (1 / 1E4) * (*_energy) * 600;
  8005da6:	4a11      	ldr	r2, [pc, #68]	; (8005dec <getSolarData+0xc0>)
-  *_energy = current / 40E-3 * 1000;
+  *_energy = current / 45E-3 * 1000;
  8005da8:	6038      	str	r0, [r7, #0]
  8005daa:	6079      	str	r1, [r7, #4]
   *_energyJ = (1 / 1E4) * (*_energy) * 600;
@@ -14650,8 +14650,8 @@ uint32_t getADC(uint32_t _ch)
  8005dd4:	3f70624d 	.word	0x3f70624d
  8005dd8:	46cefa8d 	.word	0x46cefa8d
  8005ddc:	4047677d 	.word	0x4047677d
- 8005de0:	47ae147b 	.word	0x47ae147b
- 8005de4:	3fa47ae1 	.word	0x3fa47ae1
+ 8005de0:	70a3d70a 	.word	0x70a3d70a
+ 8005de4:	3fa70a3d 	.word	0x3fa70a3d
  8005de8:	408f4000 	.word	0x408f4000
  8005dec:	eb1c432d 	.word	0xeb1c432d
  8005df0:	3f1a36e2 	.word	0x3f1a36e2
