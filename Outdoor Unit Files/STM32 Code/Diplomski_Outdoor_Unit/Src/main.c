@@ -919,7 +919,7 @@ void getSolarData(double *_energyJ, double *_energy)
   if (voltage < 0) voltage = 0;
 
   current = voltage / (220 / 4.7);
-  *_energy = current / 45E-3 * 1000;
+  *_energy = current / 42.5E-3 * 1000;
   *_energyJ = (1 / 1E4) * (*_energy) * 600;
 }
 
