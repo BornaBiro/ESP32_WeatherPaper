@@ -173,6 +173,7 @@ void setup()
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   WiFi.setHostname("WeatherPaper");
+  WiFi.config(IPAddress(192, 168, 1, 10), IPAddress(192, 168, 1, 1), IPAddress(255, 255, 255, 0), IPAddress(192, 168, 1, 1), IPAddress(8, 8, 4, 4));
 
   // Setup a temperatue, humidity and pressure sensor
   bme.setSampling(Adafruit_BME280::MODE_FORCED,
