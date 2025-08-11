@@ -82,6 +82,10 @@ struct oneCallApiHandle oneCallApi;
 struct syncStructHandle syncStruct;
 struct measruementHandle outdoorData;
 
+// FIX THIS!
+struct measruementHandle outdoorDataList[10];
+int thingSpeakList = 0;
+
 void setup()
 {
   // Varibles for storing status of each module while init
@@ -173,6 +177,7 @@ void setup()
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   WiFi.setHostname("WeatherPaper");
+  WiFi.config(IPAddress(192, 168, 1, 10), IPAddress(192, 168, 1, 1), IPAddress(255, 255, 255, 0), IPAddress(192, 168, 1, 1), IPAddress(8, 8, 4, 4));
 
   // Setup a temperatue, humidity and pressure sensor
   bme.setSampling(Adafruit_BME280::MODE_FORCED,
@@ -615,7 +620,11 @@ void loop()
         i++;
       }
       display.einkOff();
-      if (WiFi.status() == WL_CONNECTED) updateWeatherData();
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        updateWeatherData();
+        if (!forcedRef) sendDataToThinkspeak(&outdoorData);
+      }
       esp_wifi_stop();
       btStop();
 
@@ -705,10 +714,34 @@ bool readNTP(time_t *_epoch)
 
 void updateWeatherData()
 {
-  owm.getCurrentWeather("http://api.openweathermap.org/data/2.5/weather?&lat=45.684502&lon=18.402357&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657", &currentWeather);
-  owm.getForecastWeather("http://api.openweathermap.org/data/2.5/forecast?lat=45.684502&lon=18.402357&units=metric&lang=hr&APPID=b1d3e9077193732d4b5e3e2c4c036657", &forecastList, forecastDisplay);
-  owm.oneCall("http://api.openweathermap.org/data/2.5/onecall?lat=45.684502&lon=18.402357&units=metric&lang=hr&exclude=current,minutely,hourly,daily&appid=b1d3e9077193732d4b5e3e2c4c036657", &oneCallApi);  //Upozorenja
-  //owm.oneCall("http://api.openweathermap.org/data/2.5/onecall?lat=45.267136&lon=19.833549&units=metric&lang=hr&exclude=current,minutely,hourly,daily&appid=b1d3e9077193732d4b5e3e2c4c036657", &oneCallApi);
+  owm.getCurrentWeather("http://api.openweathermap.org/data/2.5/weather?&lat=45.684502&lon=18.402357&units=metric&lang=hr&APPID=[API_KEY]", &currentWeather);
+  owm.getForecastWeather("http://api.openweathermap.org/data/2.5/forecast?lat=45.684502&lon=18.402357&units=metric&lang=hr&APPID=[API_KEY]", &forecastList, forecastDisplay);
+  owm.oneCall("http://api.openweathermap.org/data/2.5/onecall?lat=45.684502&lon=18.402357&units=metric&lang=hr&exclude=current,minutely,hourly,daily&appid=[API_KEY]", &oneCallApi);  //Upozorenja
+  //owm.oneCall("http://api.openweathermap.org/data/2.5/onecall?lat=45.267136&lon=19.833549&units=metric&lang=hr&exclude=current,minutely,hourly,daily&appid=[API_KEY]", &oneCallApi);
+}
+
+void sendDataToThinkspeak(struct measruementHandle *_outdoorData)
+{
+    char _outlink[500];
+    WiFiClient client;
+    HTTPClient http;
+
+    // field1 = Temperatura
+    // field2 = Vlaga
+    // field3 = Tlak zraka
+    // field4 = UV
+    // field5 = Brzina vjetra
+    // field6 = Suncevo zracenje
+    // field7 = Smjer vjetra
+      sprintf(_outlink, "http://api.thingspeak.com/update?api_key=[API_KEY]&field1=%.2f&&field2=%.2f&field3=%.2f&field4=%.2f&field5=%.2f&field6=%.2f&field7=%d", _outdoorData->tempSHT, _outdoorData->humidity, _outdoorData->pressure, _outdoorData->uv * 100, _outdoorData->windSpeed, _outdoorData->solarW, _outdoorData->windDir);
+      if (http.begin(client, _outlink))
+      {
+          int res = http.GET();
+          if (res > 0)
+          {
+          }
+      }
+      http.end();
 }
 
 void changeLetters(char *p)

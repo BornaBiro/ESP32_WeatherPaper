@@ -22,7 +22,6 @@ uint8_t OWMWeather::getCurrentWeather(const char* _url, struct currentWeatherHan
     {
       const char *_tempPtr = http.getString().c_str();
       strlcpy(_tempData, _tempPtr, 5000);
-      Serial.println(_tempData);
       DeserializationError err =  deserializeJson(doc, _tempData);
       if (err)
       {
@@ -109,7 +108,6 @@ uint8_t OWMWeather::getForecastWeather(const char* _url, struct forecastListHand
     {
       const char *_tempPtr = http.getString().c_str();
       strlcpy(_tempData, _tempPtr, 50000);
-      Serial.println(_tempData);
       DeserializationError err = deserializeJson(doc, _tempData);
       if (err) 
       {
