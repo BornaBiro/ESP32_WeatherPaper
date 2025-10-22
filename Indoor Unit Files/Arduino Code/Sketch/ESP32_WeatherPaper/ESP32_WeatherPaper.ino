@@ -58,10 +58,10 @@ struct tm tNow;
 time_t timeToWake;
 int timeOffset;
 
-const char ssid[] = "Biro_WLAN";
+const char ssid[] = "Biro_WLAN_2";
 //const char ssid[] = "BornaSGS20+5G";
-//const char pass[] = "CaVex250_H2sH11";
-const char pass[] = "tps65186PMIC";
+const char pass[] = "CaVex250_H2sH11";
+//const char pass[] = "tps65186PMIC";
 //const char ssid[] = "Optima-322d0e";
 //const char pass[] = "OPTIMA2649004925";
 
